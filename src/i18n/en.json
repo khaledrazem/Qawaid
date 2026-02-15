@@ -1,0 +1,108 @@
+{
+  "app": {
+    "name": "قَوَاعِد",
+    "tagline": "Learn Arabic grammar"
+  },
+  "nav": {
+    "home": "Home",
+    "profile": "Profile",
+    "leaderboard": "Leaderboard",
+    "lessons": "Lessons",
+    "settings": "Settings",
+    "back": "Back"
+  },
+  "menu": {
+    "play": "Play",
+    "lessons": "Lessons",
+    "leaderboard": "Leaderboard"
+  },
+  "settings": {
+    "title": "Session settings",
+    "categories": "Choose categories",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "close": "Close",
+    "save": "Save"
+  },
+  "play": {
+    "score": "Score",
+    "combo": "Combo",
+    "question": "Question",
+    "exitConfirm": "Exit? You will lose your current progress.",
+    "exitYes": "Yes, exit",
+    "exitNo": "No, continue",
+    "noContent": "No questions available at the moment.",
+    "loading": "Loading questions…",
+    "correct": "Correct!",
+    "incorrect": "Incorrect",
+    "continue": "Continue"
+  },
+  "finish": {
+    "title": "Session over!",
+    "totalQuestions": "Questions answered",
+    "totalPoints": "Total points",
+    "maxCombo": "Max combo",
+    "newRecord": "New record!",
+    "retry": "Try again",
+    "mainMenu": "Main menu",
+    "recommendedLessons": "Recommended lessons",
+    "loginCta": "Sign in to see your rank!",
+    "pendingSync": "Points will sync when you're back online"
+  },
+  "profile": {
+    "title": "Profile",
+    "guest": "Guest",
+    "signInPrompt": "Sign in to unlock more features",
+    "signIn": "Sign in with Google",
+    "signOut": "Sign out",
+    "deleteAccount": "Delete account",
+    "stats": "Statistics",
+    "totalQuestions": "Total questions",
+    "bestSession": "Best session",
+    "lifetimePoints": "Lifetime points",
+    "language": "Language",
+    "localStats": "Session stats",
+    "bestSessionQuestions": "Best session (questions)",
+    "sessionsPlayed": "Sessions played",
+    "displayName": "Display name",
+    "editName": "Edit",
+    "saveName": "Save",
+    "signingIn": "Signing in…",
+    "welcome": "Welcome"
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "monthly": "This month",
+    "personal": "My stats",
+    "global": "Global stats",
+    "rank": "Rank",
+    "points": "Points",
+    "player": "Player",
+    "signInCta": "Sign in to see your rank",
+    "noData": "No data yet",
+    "topPlayers": "Top players",
+    "yourRank": "Your rank",
+    "anonymous": "Anonymous"
+  },
+  "lessons": {
+    "title": "Lessons",
+    "comingSoon": "Coming soon…",
+    "back": "Back",
+    "noLessons": "No lessons available yet",
+    "notFound": "Lesson not found",
+    "backToList": "Back to lessons",
+    "noContent": "No content for this lesson yet",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "pageOf": "{{current}} of {{total}}"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close"
+  }
+}

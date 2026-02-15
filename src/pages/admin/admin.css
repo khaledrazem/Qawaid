@@ -1,0 +1,689 @@
+/* ==========================================================================
+   Admin styles
+   ========================================================================== */
+
+/* --- Layout --- */
+.admin-loading {
+  padding: var(--space-6);
+}
+
+.admin-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.admin-header {
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 3px solid var(--secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.admin-nav {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.admin-nav-link {
+  color: var(--primary-foreground);
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.admin-nav-link:hover,
+.admin-nav-link.active {
+  color: var(--secondary);
+  opacity: 1;
+}
+
+.admin-nav-link.active {
+  font-weight: 700;
+}
+
+.admin-username {
+  color: var(--primary-foreground);
+  opacity: 0.85;
+}
+
+.admin-signout {
+  margin-inline-start: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--primary-foreground);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-signout:hover {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: var(--secondary);
+}
+
+.admin-main {
+  flex: 1;
+  padding: var(--space-6);
+}
+
+/* --- Login --- */
+.admin-login {
+  max-width: 360px;
+  margin: var(--space-12) auto;
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+}
+
+.admin-login h1 {
+  margin-top: 0;
+  color: var(--primary);
+}
+
+.admin-login .field {
+  margin-bottom: var(--space-3);
+}
+
+.admin-login .field:last-of-type {
+  margin-bottom: var(--space-4);
+}
+
+.admin-login .field label {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.admin-login .field input {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-base);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  color: var(--foreground);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.admin-login .field input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 61, 46, 0.2);
+}
+
+.admin-login .field input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.admin-login .hint {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* --- Shared page --- */
+.page-title {
+  margin-top: 0;
+  color: var(--primary);
+}
+
+.page-subtitle {
+  color: var(--muted-foreground);
+  margin-bottom: var(--space-4);
+}
+
+.btn-add {
+  margin-bottom: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-6);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-add:hover {
+  background: #0D3526;
+}
+
+.admin-shell .card button:not(.btn-delete):not(.btn-cancel):not(.btn-sm) {
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.admin-shell .card button:not(.btn-delete):not(.btn-cancel):not(.btn-sm):hover {
+  background: var(--muted);
+  border-color: var(--primary);
+}
+
+.admin-shell .card .form-actions button,
+.admin-shell .card .form-row button {
+  padding: var(--space-3) var(--space-6);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
+}
+
+.admin-shell .card .form-actions button:hover,
+.admin-shell .card .form-row button:hover {
+  background: #0D3526;
+}
+
+.admin-shell .item-list button:not(.btn-delete),
+.admin-shell .item-row button:not(.btn-delete) {
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.admin-shell .item-list button:hover:not(.btn-delete),
+.admin-shell .item-row button:hover:not(.btn-delete) {
+  background: var(--muted);
+  border-color: var(--primary);
+}
+
+/* --- Card (add / edit forms) --- */
+.admin-shell .card {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+}
+
+.admin-shell .card .form-row {
+  margin-bottom: var(--space-4);
+}
+
+.admin-shell .card .form-row label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
+
+.admin-shell .card .form-actions {
+  margin-top: var(--space-3);
+}
+
+/* --- Admin form controls: one consistent style for all text fields, dropdowns, multiselects --- */
+.admin-shell input:not([type="checkbox"]):not([type="radio"]),
+.admin-shell textarea,
+.admin-shell select,
+.admin-shell .modal-content input:not([type="checkbox"]):not([type="radio"]),
+.admin-shell .modal-content textarea,
+.admin-shell .modal-content select,
+.admin-login input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 48px;
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--foreground);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.admin-shell input:not([type="checkbox"]):focus,
+.admin-shell textarea:focus,
+.admin-shell select:focus,
+.admin-shell .modal-content input:not([type="checkbox"]):focus,
+.admin-shell .modal-content textarea:focus,
+.admin-shell .modal-content select:focus,
+.admin-login input:not([type="checkbox"]):focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 61, 46, 0.2);
+}
+
+.admin-shell input::placeholder,
+.admin-shell textarea::placeholder,
+.admin-shell .modal-content input::placeholder,
+.admin-shell .modal-content textarea::placeholder,
+.admin-login input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.admin-shell input[type="checkbox"],
+.admin-shell .modal-content input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  min-height: unset;
+  padding: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Width / size variants (same look, different width or min-height) */
+.admin-shell .card .input-wide,
+.admin-shell .card input.input-wide {
+  width: 100%;
+  max-width: 360px;
+}
+
+.admin-shell .card .input-full,
+.admin-shell .card input.input-full {
+  width: 100%;
+  max-width: 480px;
+}
+
+.admin-shell .card textarea {
+  width: 100%;
+  max-width: 480px;
+  min-height: 140px;
+  padding: var(--space-4) var(--space-5);
+  resize: vertical;
+}
+
+/* Single-select dropdowns (same as base) */
+.admin-shell select:not([multiple]) {
+  min-height: 48px;
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  appearance: auto;
+}
+
+/* Multiselects (same padding/font, taller box) */
+.admin-shell .card .select-multi,
+.admin-shell .card select.select-multi,
+.admin-shell .modal-content .select-multi,
+.admin-shell .modal-content select.select-multi {
+  width: 100%;
+  max-width: 480px;
+  min-height: 180px;
+  padding: var(--space-4);
+}
+
+.admin-shell .card .select-multi option,
+.admin-shell .modal-content .select-multi option {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+}
+
+.admin-shell .card .select-multi-sm,
+.admin-shell .card select.select-multi-sm {
+  min-height: 140px;
+  width: 100%;
+  max-width: 320px;
+  padding: var(--space-4);
+}
+
+.admin-shell .card .select-multi-md,
+.admin-shell .card select.select-multi-md {
+  min-height: 160px;
+  width: 100%;
+  max-width: 480px;
+  padding: var(--space-4);
+}
+
+/* Modal and def-search / def-select (same base style, explicit so they match) */
+.admin-shell .modal-content .def-search,
+.admin-shell .modal-content input.def-search {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-3);
+}
+
+.admin-shell .modal-content .def-select,
+.admin-shell .modal-content select.def-select {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-4) var(--space-5);
+}
+
+.admin-shell .modal-content select.def-select[size] {
+  min-height: 160px;
+}
+
+/* --- Item list (card style, matching learner UI) --- */
+.item-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.item-list li {
+  padding: var(--space-4) var(--space-5);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.item-list li:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.item-list li.padded {
+  padding: var(--space-5) var(--space-6);
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.item-row.spaced {
+  margin-bottom: 8px;
+}
+
+.item-name {
+  flex: 1 1 100%;
+}
+
+.inline-input {
+  width: 100%;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+/* --- Expand / collapse --- */
+.expand-btn {
+  padding: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.expanded-defs {
+  margin: var(--space-2) 0 0 var(--space-6);
+  padding-inline-start: var(--space-4);
+  color: var(--muted-foreground);
+}
+
+/* --- Text helpers --- */
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.text-warning {
+  color: var(--secondary);
+}
+
+.text-error {
+  color: var(--destructive);
+}
+
+.text-mono {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* --- Buttons --- */
+.btn-delete,
+.admin-shell .item-list .btn-delete,
+.admin-shell .item-row .btn-delete {
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid #B91C1C;
+  background: #B91C1C;
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-delete:hover,
+.admin-shell .item-list .btn-delete:hover,
+.admin-shell .item-row .btn-delete:hover {
+  background: #991B1B;
+  border-color: #991B1B;
+}
+
+.btn-cancel {
+  margin-inline-start: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.btn-cancel:hover {
+  background: var(--accent);
+}
+
+.btn-sm {
+  margin-inline-start: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.btn-sm:hover {
+  background: var(--muted);
+  border-color: var(--primary);
+}
+
+.btn-submit {
+  padding: var(--space-3) var(--space-6);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  cursor: pointer;
+}
+
+/* --- Modal --- */
+.admin-shell .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.admin-shell .modal-content {
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  max-width: 500px;
+}
+
+.admin-shell .modal-content.narrow {
+  max-width: 400px;
+}
+
+.admin-shell .modal-actions {
+  margin-top: var(--space-4);
+}
+
+/* --- Prompt picker --- */
+.prompt-picker {
+  margin-bottom: 16px;
+  font-size: 24px;
+  line-height: 1.8;
+}
+
+.prompt-char,
+.prompt-word {
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.prompt-word {
+  padding: 0 4px;
+  margin-right: 4px;
+}
+
+.prompt-char.selected,
+.prompt-word.selected {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.prompt-defs {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  color: var(--muted-foreground);
+}
+
+.def-search {
+  margin-bottom: var(--space-3);
+}
+
+.def-select {
+  width: 100%;
+}
+
+/* --- Config page --- */
+.config-page {
+  max-width: 720px;
+}
+
+.config-page .info-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 16px;
+  font-size: 14px;
+}
+
+.config-page dt {
+  color: var(--muted-foreground);
+}
+
+.config-page dd {
+  margin: 0;
+}
+
+.config-page dd.break-all {
+  word-break: break-all;
+}
+
+.config-page .section {
+  margin-bottom: 24px;
+}
+
+.config-page .section-title {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.config-page .no-session {
+  margin: var(--space-2) 0 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.config-page pre {
+  background: var(--muted);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  overflow: auto;
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-3);
+}
+
+.config-page .result-pre {
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.config-page .pat-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.config-page .pat-input {
+  width: 100%;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.config-page .api-hint {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-bottom: var(--space-2);
+}
+
+.config-page .result-hint {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  margin-top: var(--space-2);
+}
+
+.config-page summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.config-page details {
+  margin-top: 12px;
+}
+
+/* --- Questions form --- */
+.min-options-hint {
+  margin-inline-start: var(--space-2);
+  color: var(--muted-foreground);
+}
+
+.correct-answer-hint {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-bottom: var(--space-3);
+}
+
+.placeholder-hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.placeholder-hint code {
+  background: var(--muted);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+}

@@ -250,9 +250,10 @@ Correct answer that's stored in question table is a definition; The actual answe
 UML
 
 
-
-
-
+[uml_1]
+[uml_2]
+[uml_3]
+[uml_4]
 
 
 User stories
@@ -297,7 +298,7 @@ As a system, I want to keep track of the mistakes a user makes and adjust the ra
 
 
 Database data model
-
+[db_1]
 
 enum question_type {
   MCQ
