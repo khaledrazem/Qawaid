@@ -1,0 +1,38 @@
+# Qawaid backend (with CAMeL Tools) — run without installing Python 3.12 or camel-tools locally.
+# From project root:
+#   docker compose up --build   (first time or after changing requirements/Dockerfile)
+#   docker compose up           (code changes are live via volume; no rebuild needed)
+# Backend: http://localhost:8000
+# Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (and optionally SEED_SECRET) in .env or below.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount backend code so edits apply without rebuilding (rebuild only for deps/Dockerfile)
+      - ./backend:/app
+    command:
+      - python
+      - -m
+      - uvicorn
+      - main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --log-level
+      - debug
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL:-${VITE_SUPABASE_URL:-}}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-${SUPABASE_SECRET_KEY:-}}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      - SEED_SECRET=${SEED_SECRET:-}
+    env_file:
+      - .env
+    restart: unless-stopped

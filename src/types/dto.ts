@@ -31,8 +31,20 @@ export interface QuestionDTO {
   points: number;
   /** Character index of the correct word/letter in the prompt (for click types). */
   indexStart: number;
+  /** End character index for letter-range highlighting (optional). */
+  indexEnd?: number;
   /** Whether the target is a letter (true) or word (false). */
   isLetter: boolean;
+  /** Prompt ID (for backend batch: used to pass usedPromptIds on next fetch). */
+  promptId?: string;
+  /** For visual_mcq: image URL to display. */
+  imageUrl?: string | null;
+  /** For fill_in_sentence / transformation: the word the user must enter. */
+  expectedWord?: string;
+  /** For yes_no: correct answer is literal "yes" or "no". */
+  correctAnswerYesNo?: boolean;
+  /** Shown when user answers incorrectly (definition description). */
+  definitionDescription?: string | null;
 }
 
 /** Live session state, managed in memory during play. */

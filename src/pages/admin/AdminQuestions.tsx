@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { Question, Category, Definition } from '@/types/db';
+import {
+  getAdminQuestions,
+  createAdminQuestion,
+  patchAdminQuestion,
+  deleteAdminQuestion,
+} from '@/services/backendApi';
+import type { Question, Category } from '@/types/db';
 import type { QuestionType } from '@/types/db';
-
-const MIN_OPTIONS_BY_TYPE: Record<QuestionType, number> = {
-  MCQ: 4,
-  click_word: 1,
-  click_letter: 1,
-};
 
 export default function AdminQuestions() {
   const [list, setList] = useState<Question[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [_definitions, setDefinitions] = useState<Definition[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -20,21 +18,17 @@ export default function AdminQuestions() {
     question_text: '',
     category_id: '',
     type: 'MCQ' as QuestionType,
-    min_options: 4,
     is_active: true,
   });
 
   const load = async () => {
-    const [qRes, cRes, dRes] = await Promise.all([
-      supabase.from('questions').select('*').order('question_text'),
-      supabase.from('categories').select('*').order('name'),
-      supabase.from('definitions').select('*').order('label'),
-    ]);
-    if (qRes.error || cRes.error || dRes.error) return;
-    setList(qRes.data ?? []);
-    setCategories(cRes.data ?? []);
-    setDefinitions(dRes.data ?? []);
-    setLoading(false);
+    try {
+      const { questions: qs, categories: cats } = await getAdminQuestions();
+      setList((qs ?? []) as Question[]);
+      setCategories((cats ?? []) as Category[]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -46,7 +40,6 @@ export default function AdminQuestions() {
       question_text: '',
       category_id: categories[0]?.id ?? '',
       type: 'MCQ',
-      min_options: 4,
       is_active: true,
     });
   };
@@ -58,13 +51,8 @@ export default function AdminQuestions() {
       question_text: row.question_text,
       category_id: row.category_id,
       type: row.type,
-      min_options: row.min_options,
       is_active: row.is_active,
     });
-  };
-
-  const setFormType = (type: QuestionType) => {
-    setForm((f) => ({ ...f, type, min_options: MIN_OPTIONS_BY_TYPE[type] }));
   };
 
   const save = async () => {
@@ -73,13 +61,12 @@ export default function AdminQuestions() {
       question_text: form.question_text.trim(),
       category_id: form.category_id,
       type: form.type,
-      min_options: form.min_options,
       is_active: form.is_active,
     };
     if (editingId) {
-      await supabase.from('questions').update(payload).eq('id', editingId);
+      await patchAdminQuestion(editingId, payload);
     } else {
-      await supabase.from('questions').insert(payload);
+      await createAdminQuestion(payload);
     }
     setAddOpen(false);
     setEditingId(null);
@@ -87,13 +74,13 @@ export default function AdminQuestions() {
   };
 
   const toggleActive = async (row: Question) => {
-    await supabase.from('questions').update({ is_active: !row.is_active }).eq('id', row.id);
+    await patchAdminQuestion(row.id, { is_active: !row.is_active });
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm('Delete this question?')) return;
-    await supabase.from('questions').delete().eq('id', id);
+    await deleteAdminQuestion(id);
     load();
   };
 
@@ -141,12 +128,18 @@ export default function AdminQuestions() {
               </div>
               <div className="form-row">
                 <label>Type </label>
-                <select value={form.type} onChange={(e) => setFormType(e.target.value as QuestionType)}>
+                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as QuestionType }))}>
                   <option value="MCQ">MCQ</option>
                   <option value="click_word">click_word</option>
                   <option value="click_letter">click_letter</option>
+                  <option value="click_letter_range">click_letter_range</option>
+                  <option value="yes_no">yes_no</option>
+                  <option value="fill_in_sentence">fill_in_sentence</option>
+                  <option value="transformation">transformation</option>
+                  <option value="mcq_fillin">mcq_fillin</option>
+                  <option value="visual_mcq">visual_mcq</option>
+                  <option value="drag_and_match">drag_and_match</option>
                 </select>
-                <span className="min-options-hint">min_options: {form.min_options}</span>
               </div>
               <p className="correct-answer-hint">
                 Correct answer is derived from prompt_definitions when building a question (the definition linked to the word/letter being quizzed).

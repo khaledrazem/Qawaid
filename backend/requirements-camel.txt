@@ -1,0 +1,4 @@
+# Optional: CAMeL Tools (use with Python 3.8–3.12; often fails on 3.13+ or Windows due to camel-kenlm).
+# Install: pip install -r requirements.txt -r requirements-camel.txt
+# Then: camel_data -i morphology-db-msa-r13
+camel-tools>=1.5.0

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useAuth } from '@/contexts/AuthContext';
 import { useQuestionBatch } from '@/hooks/useQuestionBatch';
 import { SESSION } from '@/services/config';
 import {
@@ -12,6 +13,7 @@ import {
 } from '@/services/sessionManager';
 import type { SessionState } from '@/services/sessionManager';
 import type { QuestionDTO } from '@/types/dto';
+import { getPromptWords } from '@/lib/promptWords';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
 
 type Feedback = { type: 'correct' | 'incorrect' } | null;
@@ -19,11 +21,15 @@ type Feedback = { type: 'correct' | 'incorrect' } | null;
 export default function Play() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { loading, empty, current, advance } = useQuestionBatch();
+  const { user } = useAuth();
+  const { loading, empty, authRequired, current, advance } = useQuestionBatch();
 
   const [session, setSession] = useState<SessionState>(createSession);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [exitConfirm, setExitConfirm] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportComment, setReportComment] = useState('');
+  const [reportSending, setReportSending] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [clickedIndex, setClickedIndex] = useState<number | null>(null);
   const [pendingSessionOver, setPendingSessionOver] = useState(false);
@@ -96,9 +102,9 @@ export default function Play() {
       if (feedback) return;
       setClickedIndex(index);
 
-      // For letters, exact match; for words, check if correctIndex falls within the clicked word
+      const end = question.indexEnd != null && question.indexEnd > question.indexStart ? question.indexEnd : question.indexStart + 1;
       const isCorrect = question.isLetter
-        ? index === question.indexStart
+        ? (index >= question.indexStart && index < end)
         : question.indexStart >= index && question.indexStart < index + wordLength;
       const answerId = isCorrect ? question.correctAnswer.id : '__wrong__';
       handleAnswer(answerId, question);
@@ -117,10 +123,27 @@ export default function Play() {
 
   const cancelExit = () => setExitConfirm(false);
 
+  const submitReport = useCallback(async () => {
+    if (!current?.promptId || !reportComment.trim() || !user?.id) return;
+    setReportSending(true);
+    try {
+      const { postQuestionReport } = await import('@/services/backendApi');
+      await postQuestionReport({
+        prompt_id: current.promptId,
+        definition_id: current.correctAnswer?.id ?? null,
+        comment: reportComment.trim(),
+      });
+      setReportOpen(false);
+      setReportComment('');
+    } finally {
+      setReportSending(false);
+    }
+  }, [current, reportComment, user?.id]);
+
   /* ---- Render helpers ---- */
   const totalLives = SESSION.startingLives;
-  const isReady = !loading && !empty && current;
-  const showNoContent = !loading && empty;
+  const isReady = !loading && !empty && !authRequired && current;
+  const showNoContent = !loading && empty && !authRequired;
 
   return (
     <div className="play-wrap play-with-bg">
@@ -170,14 +193,23 @@ export default function Play() {
 
       {/* Main content */}
       <div className="play-body">
-        {loading && (
+        {authRequired && (
+          <div className="placeholder">
+            <p className="placeholder-text">{t('play.signInRequired', 'Please sign in to play.')}</p>
+            <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate('/')}>
+              {t('play.goToMenu', 'Go to menu')}
+            </button>
+          </div>
+        )}
+
+        {loading && !authRequired && (
           <div className="placeholder">
             <div className="spinner" />
             <p className="placeholder-text">{t('play.loading')}</p>
           </div>
         )}
 
-        {showNoContent && (
+        {showNoContent && !authRequired && (
           <div className="placeholder">
             <p className="placeholder-text">{t('play.noContent')}</p>
           </div>
@@ -193,13 +225,35 @@ export default function Play() {
               clickedIndex={clickedIndex}
               onAnswer={(id) => handleAnswer(id, current)}
               onClickTarget={(idx, len) => handleClickTarget(idx, len, current)}
+              onReport={user ? () => setReportOpen(true) : undefined}
             />
 
-            {/* Continue button — only on incorrect */}
             {feedback?.type === 'incorrect' && (
               <button type="button" className="btn btn-primary btn-lg" onClick={doAdvance}>
                 {t('play.continue')}
               </button>
+            )}
+
+            {reportOpen && current && (
+              <div className="modal-backdrop" onClick={() => setReportOpen(false)}>
+                <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+                  <h3>Report question</h3>
+                  <p className="text-muted">Describe the issue (e.g. wrong answer, unclear prompt).</p>
+                  <textarea
+                    value={reportComment}
+                    onChange={(e) => setReportComment(e.target.value)}
+                    placeholder="Comment…"
+                    rows={3}
+                    className="input-full"
+                  />
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-secondary" onClick={() => setReportOpen(false)}>Cancel</button>
+                    <button type="button" className="btn btn-primary" onClick={submitReport} disabled={!reportComment.trim() || reportSending}>
+                      {reportSending ? 'Sending…' : 'Submit'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </>
         )}
@@ -219,6 +273,7 @@ interface QuestionViewProps {
   clickedIndex: number | null;
   onAnswer: (id: string) => void;
   onClickTarget: (index: number, wordLength: number) => void;
+  onReport?: () => void;
 }
 
 function QuestionView({
@@ -228,48 +283,61 @@ function QuestionView({
   clickedIndex,
   onAnswer,
   onClickTarget,
+  onReport,
 }: QuestionViewProps) {
   const { t } = useTranslation();
-  const isMCQ = question.questionType === 'MCQ';
   const isClickWord = question.questionType === 'click_word';
   const isClickLetter = question.questionType === 'click_letter';
+  const isClickLetterRange = question.questionType === 'click_letter_range';
+  const isClickType = isClickWord || isClickLetter || isClickLetterRange;
 
   return (
     <div className="question-card card">
-      {/* Question text */}
+      {onReport && (
+        <button
+          type="button"
+          className="question-card-report"
+          onClick={onReport}
+          title="Report question"
+          aria-label="Report question"
+        >
+          ⚠
+        </button>
+      )}
       <h2 className="question-text">{question.questionText}</h2>
 
-      {/* Prompt sentence */}
       <div className="question-prompt">
-        {(isClickWord || isClickLetter) ? (
+        {isClickType ? (
           <ClickablePrompt
             text={question.promptText}
-            isLetter={isClickLetter}
+            isLetter={isClickLetter || isClickLetterRange}
             correctIndex={question.indexStart}
+            correctIndexEnd={question.indexEnd}
             clickedIndex={clickedIndex}
             feedback={feedback}
             onClickTarget={onClickTarget}
           />
         ) : (
-          /* MCQ: highlight the target word/letter in the prompt */
           <HighlightedPrompt
             text={question.promptText}
             indexStart={question.indexStart}
+            indexEnd={question.indexEnd}
             isLetter={question.isLetter}
           />
         )}
       </div>
 
-      {/* Feedback banner — just correct/incorrect, no answer reveal */}
       {feedback && (
         <div className={`question-feedback ${feedback.type}`}>
           {feedback.type === 'correct' ? '✓' : '✗'}{' '}
           {feedback.type === 'correct' ? t('play.correct') : t('play.incorrect')}
+          {feedback.type === 'incorrect' && question.definitionDescription && (
+            <div className="question-feedback-description">{question.definitionDescription}</div>
+          )}
         </div>
       )}
 
-      {/* MCQ answer buttons — inside same card */}
-      {isMCQ && (
+      {(['MCQ', 'visual_mcq', 'mcq_fillin'] as const).includes(question.questionType) && question.possibleAnswers?.length ? (
         <div className="mcq-options">
           {question.possibleAnswers.map((opt) => {
             let cls = 'mcq-option';
@@ -291,7 +359,7 @@ function QuestionView({
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -304,16 +372,18 @@ function QuestionView({
 interface HighlightedPromptProps {
   text: string;
   indexStart: number;
+  indexEnd?: number | null;
   isLetter: boolean;
 }
 
-function HighlightedPrompt({ text, indexStart, isLetter }: HighlightedPromptProps) {
+function HighlightedPrompt({ text, indexStart, indexEnd, isLetter }: HighlightedPromptProps) {
   if (isLetter) {
     const chars = [...text];
+    const end = indexEnd != null && indexEnd > indexStart ? indexEnd : indexStart + 1;
     return (
       <span className="question-prompt-text">
         {chars.map((ch, i) => (
-          <span key={i} className={i === indexStart ? 'prompt-highlight' : ''}>
+          <span key={i} className={i >= indexStart && i < end ? 'prompt-highlight' : ''}>
             {ch}
           </span>
         ))}
@@ -321,22 +391,13 @@ function HighlightedPrompt({ text, indexStart, isLetter }: HighlightedPromptProp
     );
   }
 
-  // Word mode: find the word at indexStart
-  const words: { word: string; startIndex: number }[] = [];
-  let idx = 0;
-  for (const segment of text.split(/(\s+)/)) {
-    if (segment.trim()) {
-      words.push({ word: segment, startIndex: idx });
-    }
-    idx += segment.length;
-  }
-
+  const words = getPromptWords(text);
   return (
     <span className="question-prompt-text">
       {words.map((w, i) => (
         <span key={w.startIndex}>
           {i > 0 && ' '}
-          <span className={indexStart >= w.startIndex && indexStart < w.startIndex + w.word.length ? 'prompt-highlight' : ''}>
+          <span className={indexStart >= w.startIndex && indexStart < w.endIndex ? 'prompt-highlight' : ''}>
             {w.word}
           </span>
         </span>
@@ -355,6 +416,7 @@ interface ClickablePromptProps {
   text: string;
   isLetter: boolean;
   correctIndex: number;
+  correctIndexEnd?: number | null;
   clickedIndex: number | null;
   feedback: Feedback;
   onClickTarget: (index: number, wordLength: number) => void;
@@ -364,17 +426,20 @@ function ClickablePrompt({
   text,
   isLetter,
   correctIndex,
+  correctIndexEnd,
   clickedIndex,
   feedback,
   onClickTarget,
 }: ClickablePromptProps) {
+  const letterEnd = correctIndexEnd != null && correctIndexEnd > correctIndex ? correctIndexEnd : correctIndex + 1;
   if (isLetter) {
     return (
       <span className="click-prompt">
         {[...text].map((char, i) => {
           let cls = 'click-letter';
-          if (feedback && i === correctIndex) cls += ' correct';
-          else if (feedback && clickedIndex === i && i !== correctIndex) cls += ' wrong';
+          const inCorrectRange = i >= correctIndex && i < letterEnd;
+          if (feedback && inCorrectRange) cls += ' correct';
+          else if (feedback && clickedIndex === i && !inCorrectRange) cls += ' wrong';
           return (
             <span
               key={i}
@@ -389,22 +454,13 @@ function ClickablePrompt({
     );
   }
 
-  // click_word: split into words, track char indices
-  const words: { word: string; startIndex: number }[] = [];
-  let idx = 0;
-  for (const word of text.split(/(\s+)/)) {
-    if (word.trim()) {
-      words.push({ word, startIndex: idx });
-    }
-    idx += word.length;
-  }
-
+  const words = getPromptWords(text);
   return (
     <span className="click-prompt">
       {words.map((w) => {
         let cls = 'click-word';
-        const isCorrectWord = correctIndex >= w.startIndex && correctIndex < w.startIndex + w.word.length;
-        const isClickedWord = clickedIndex !== null && clickedIndex >= w.startIndex && clickedIndex < w.startIndex + w.word.length;
+        const isCorrectWord = correctIndex >= w.startIndex && correctIndex < w.endIndex;
+        const isClickedWord = clickedIndex !== null && clickedIndex >= w.startIndex && clickedIndex < w.endIndex;
         if (feedback && isCorrectWord) cls += ' correct';
         else if (feedback && isClickedWord && !isCorrectWord) cls += ' wrong';
         return (

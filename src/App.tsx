@@ -7,6 +7,8 @@ import AdminCategories from './pages/admin/AdminCategories';
 import AdminDefinitions from './pages/admin/AdminDefinitions';
 import AdminPrompts from './pages/admin/AdminPrompts';
 import AdminQuestions from './pages/admin/AdminQuestions';
+import AdminReports from './pages/admin/AdminReports';
+import AdminStatistics from './pages/admin/AdminStatistics';
 import AdminConfig from './pages/admin/AdminConfig';
 
 /* --- Learner app --- */
@@ -45,6 +47,8 @@ function App() {
         <Route path="definitions" element={<AdminDefinitions />} />
         <Route path="prompts" element={<AdminPrompts />} />
         <Route path="questions" element={<AdminQuestions />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="statistics" element={<AdminStatistics />} />
         <Route path="config" element={<AdminConfig />} />
       </Route>
 

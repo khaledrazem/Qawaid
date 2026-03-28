@@ -23,7 +23,7 @@ function getLocal(key: string): number {
 export default function Profile() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLanguage();
-  const { user, loading: authLoading, signInWithGoogle, signOut, refreshUser } = useAuth();
+  const { user, loading: authLoading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError } = useAuth();
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -78,6 +78,12 @@ export default function Profile() {
             <div className="profile-avatar">👤</div>
             <p className="profile-name">{t('profile.guest')}</p>
             <p className="profile-hint">{t('profile.signInPrompt')}</p>
+            {authError && (
+              <div className="profile-auth-error" role="alert">
+                <span className="profile-auth-error-text">{authError}</span>
+                <button type="button" className="profile-auth-error-dismiss" onClick={clearAuthError} aria-label="Dismiss">×</button>
+              </div>
+            )}
             <GoldDivider className="profile-divider" />
             <button
               type="button"

@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { persistSession, queueSessionWhenOffline } from '@/services/sessionPersistence';
 import { fetchLeaderboard } from '@/services/leaderboardService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
@@ -94,24 +93,18 @@ export default function Finish() {
     if (!summary || summary.incorrectCategoryIds.length === 0) return;
 
     (async () => {
-      const { data, error } = await supabase
-        .from('lessons')
-        .select('id, title, category_id')
-        .in('category_id', summary.incorrectCategoryIds)
-        .eq('is_active', true);
-
-      if (error || !data) return;
-
-      // Deduplicate by category — one lesson per category
-      const seen = new Set<string>();
+      const { getLessons } = await import('@/services/backendApi');
+      const data = await getLessons();
+      const byCategory = new Set(summary.incorrectCategoryIds);
       const unique: LessonRecommendationDTO[] = [];
+      const seen = new Set<string>();
       for (const row of data) {
-        if (!seen.has(row.category_id)) {
-          seen.add(row.category_id);
+        if (byCategory.has(row.categoryId) && !seen.has(row.categoryId)) {
+          seen.add(row.categoryId);
           unique.push({
             lessonId: row.id,
             title: row.title,
-            categoryId: row.category_id,
+            categoryId: row.categoryId,
           });
         }
       }

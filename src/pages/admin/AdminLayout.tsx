@@ -7,6 +7,8 @@ const tabs = [
   { path: 'definitions', label: 'Definitions' },
   { path: 'prompts', label: 'Prompts' },
   { path: 'questions', label: 'Questions' },
+  { path: 'reports', label: 'Reports' },
+  { path: 'statistics', label: 'Statistics' },
   { path: 'config', label: 'Config' },
 ];
 

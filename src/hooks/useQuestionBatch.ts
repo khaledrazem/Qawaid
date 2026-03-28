@@ -21,6 +21,8 @@ import type { QuestionDTO } from '@/types/dto';
 interface UseQuestionBatchReturn {
   loading: boolean;
   empty: boolean;
+  /** True when the backend returned 401 — user must sign in to play. */
+  authRequired: boolean;
   current: QuestionDTO | null;
   advance: () => Promise<void>;
   reset: () => Promise<void>;
@@ -31,6 +33,7 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
   const initStarted = useRef(false);
   const [loading, setLoading] = useState(true);
   const [empty, setEmpty] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
   const [current, setCurrent] = useState<QuestionDTO | null>(null);
   const { user } = useAuth();
 
@@ -54,7 +57,17 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
         }
       }
 
-      await loader.init(userWeights);
+      try {
+        await loader.init(userWeights);
+      } catch (err) {
+        const status = (err as Error & { status?: number })?.status;
+        if (status === 401) {
+          setAuthRequired(true);
+          setLoading(false);
+          return;
+        }
+        throw err;
+      }
 
       if (loader.empty) {
         setLoading(false);
@@ -102,7 +115,17 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
     }
 
     loader.reset();
-    await loader.init(userWeights);
+    try {
+      await loader.init(userWeights);
+    } catch (err) {
+      const status = (err as Error & { status?: number })?.status;
+      if (status === 401) {
+        setAuthRequired(true);
+        setLoading(false);
+        return;
+      }
+      throw err;
+    }
 
     if (loader.empty) {
       setLoading(false);
@@ -116,5 +139,5 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
     setEmpty(!first);
   }, [user]);
 
-  return { loading, empty, current, advance, reset };
+  return { loading, empty, authRequired, current, advance, reset };
 }

@@ -1,4 +1,14 @@
-export type QuestionType = 'MCQ' | 'click_word' | 'click_letter';
+export type QuestionType =
+  | 'MCQ'
+  | 'click_word'
+  | 'click_letter'
+  | 'mcq_fillin'
+  | 'fill_in_sentence'
+  | 'transformation'
+  | 'yes_no'
+  | 'visual_mcq'
+  | 'drag_and_match'
+  | 'click_letter_range';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export interface User {
@@ -23,6 +33,7 @@ export interface Definition {
   id: string;
   label: string;
   is_active: boolean;
+  description?: string | null;
 }
 
 export interface CategoryDefinition {
@@ -36,9 +47,10 @@ export interface Prompt {
   prompt_text: string;
   difficulty: Difficulty;
   is_active: boolean;
-  version: number;
   created_at: string;
   updated_at: string;
+  image_url?: string | null;
+  definition_id?: string | null;
 }
 
 export interface PromptDefinition {
@@ -46,6 +58,7 @@ export interface PromptDefinition {
   prompt_id: string;
   definition_id: string;
   index_start: number;
+  index_end?: number | null;
   is_letter: boolean;
   created_at: string;
   updated_at: string;
@@ -56,8 +69,8 @@ export interface Question {
   question_text: string;
   category_id: string;
   type: QuestionType;
-  min_options: number;
   is_active: boolean;
+  include_definition_ids?: string[] | null;
 }
 
 export interface Lesson {
@@ -66,4 +79,13 @@ export interface Lesson {
   content_html: string | null;
   category_id: string;
   is_active: boolean;
+}
+
+export interface QuestionReport {
+  id: string;
+  prompt_id: string;
+  definition_id: string | null;
+  user_id: string;
+  comment: string;
+  created_at: string;
 }

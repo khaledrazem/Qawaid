@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasPlayableContent } from '@/services/questionEngine';
+import { getPlayable } from '@/services/backendApi';
 import SettingsModal from '@/components/SettingsModal';
 import { BackgroundPattern, TextureOverlay, CornerOrnament, GoldDivider } from '@/components/Decorative';
 
@@ -15,9 +15,9 @@ export default function MainMenu() {
 
   useEffect(() => {
     let cancelled = false;
-    hasPlayableContent().then((ok) => {
-      if (!cancelled) setCanPlay(ok);
-    });
+    getPlayable()
+      .then((res) => { if (!cancelled) setCanPlay(res.playable); })
+      .catch(() => { if (!cancelled) setCanPlay(false); });
     return () => { cancelled = true; };
   }, []);
 

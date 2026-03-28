@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getProfile } from '@/services/backendApi';
 import type { User } from '@/types/db';
 
 interface AdminAuthState {
@@ -11,14 +12,18 @@ interface AdminAuthState {
 }
 
 async function checkAdminUser(authUserId: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', authUserId)
-    .eq('is_admin', true)
-    .single();
-  if (error || !data) return null;
-  return data as User;
+  try {
+    const profile = await getProfile();
+    if (profile.id !== authUserId || !profile.isAdmin) return null;
+    return {
+      id: profile.id,
+      display_name: profile.displayName,
+      avatar_url: profile.avatarUrl,
+      is_admin: profile.isAdmin,
+    } as User;
+  } catch {
+    return null;
+  }
 }
 
 export function useAdminAuth(): AdminAuthState {

@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  getAdminCategories,
+  createAdminCategory,
+  patchAdminCategory,
+  deleteAdminCategory,
+} from '@/services/backendApi';
 import type { Category, Definition } from '@/types/db';
 
 interface CategoryWithCount extends Category {
@@ -26,21 +31,19 @@ export default function AdminCategories() {
   const [assignDefIds, setAssignDefIds] = useState<string[]>([]);
 
   const load = async () => {
-    const [catRes, defRes, cdRes] = await Promise.all([
-      supabase.from('categories').select('*').order('name'),
-      supabase.from('definitions').select('*').order('label'),
-      supabase.from('category_definitions').select('category_id, definition_id'),
-    ]);
-    if (catRes.error || defRes.error || cdRes.error) return;
-    const cdData = (cdRes.data ?? []) as CategoryDefinitionRow[];
-    setCategoryDefs(cdData);
-    const defCount = cdData.reduce<Record<string, number>>((acc, row) => {
-      acc[row.category_id] = (acc[row.category_id] ?? 0) + 1;
-      return acc;
-    }, {});
-    setList((catRes.data ?? []).map((c) => ({ ...c, definition_count: defCount[c.id] ?? 0 })));
-    setDefinitions(defRes.data ?? []);
-    setLoading(false);
+    try {
+      const { categories: cats, definitions: defs, category_definitions: cd } = await getAdminCategories();
+      const cdData = (cd ?? []) as CategoryDefinitionRow[];
+      setCategoryDefs(cdData);
+      const defCount = cdData.reduce<Record<string, number>>((acc, row) => {
+        acc[row.category_id] = (acc[row.category_id] ?? 0) + 1;
+        return acc;
+      }, {});
+      setList(((cats ?? []) as Category[]).map((c) => ({ ...c, definition_count: defCount[c.id] ?? 0 })));
+      setDefinitions((defs ?? []) as Definition[]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getDefinitionLabelsForCategory = (categoryId: string): string[] => {
@@ -51,7 +54,7 @@ export default function AdminCategories() {
   useEffect(() => { load(); }, []);
 
   const toggleActive = async (row: Category) => {
-    await supabase.from('categories').update({ is_active: !row.is_active }).eq('id', row.id);
+    await patchAdminCategory(row.id, { is_active: !row.is_active });
     load();
   };
 
@@ -62,47 +65,36 @@ export default function AdminCategories() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    await supabase.from('categories').update({ name: editName }).eq('id', editingId);
+    await patchAdminCategory(editingId, { name: editName });
     setEditingId(null);
     load();
   };
 
   const addCategory = async () => {
     if (!newName.trim()) return;
-    const { data } = await supabase.from('categories').insert({ name: newName.trim() }).select('id').single();
-    if (data && newDefIds.length) {
-      await supabase.from('category_definitions').insert(
-        newDefIds.map((definition_id) => ({ category_id: data.id, definition_id }))
-      );
-    }
+    await createAdminCategory(newName.trim(), newDefIds);
     setAddOpen(false);
     setNewName('');
     setNewDefIds([]);
     load();
   };
 
-  const openAssign = async (categoryId: string) => {
-    const { data } = await supabase.from('category_definitions').select('definition_id').eq('category_id', categoryId);
-    setAssignDefIds((data ?? []).map((r) => r.definition_id));
+  const openAssign = (categoryId: string) => {
+    const ids = categoryDefs.filter((r) => r.category_id === categoryId).map((r) => r.definition_id);
+    setAssignDefIds(ids);
     setAssignDefOpen(categoryId);
   };
 
   const saveAssign = async () => {
     if (!assignDefOpen) return;
-    await supabase.from('category_definitions').delete().eq('category_id', assignDefOpen);
-    if (assignDefIds.length) {
-      await supabase.from('category_definitions').insert(
-        assignDefIds.map((definition_id) => ({ category_id: assignDefOpen, definition_id }))
-      );
-    }
+    await patchAdminCategory(assignDefOpen, { definition_ids: assignDefIds });
     setAssignDefOpen(null);
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm('Delete this category? Questions and lessons may reference it.')) return;
-    await supabase.from('category_definitions').delete().eq('category_id', id);
-    await supabase.from('categories').delete().eq('id', id);
+    await deleteAdminCategory(id);
     load();
   };
 

@@ -15,3 +15,7 @@ dist/
 
 # Supabase
 .supabase/
+
+# Android signing (keep keystores out of repo)
+*.jks
+*.keystore

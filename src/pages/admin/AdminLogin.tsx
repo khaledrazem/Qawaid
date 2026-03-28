@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { getProfile } from '@/services/backendApi';
 
 const ADMIN_AUTH_DOMAIN = import.meta.env.VITE_ADMIN_AUTH_DOMAIN ?? 'admin.sahra.local';
 
@@ -18,22 +19,24 @@ export default function AdminLogin() {
     const raw = username.trim();
     const email = raw.includes('@') ? raw : `${raw}@${ADMIN_AUTH_DOMAIN}`;
     const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (err) {
+      setLoading(false);
       setError(err.message);
       return;
     }
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('is_admin')
-      .eq('id', data.user?.id)
-      .single();
-    if (!userRow?.is_admin) {
-      await supabase.auth.signOut();
-      setError('Not an admin account.');
-      return;
+    try {
+      const profile = await getProfile();
+      if (!profile.isAdmin) {
+        await supabase.auth.signOut();
+        setError('Not an admin account.');
+        return;
+      }
+      navigate('/admin/categories', { replace: true });
+    } catch {
+      setError('Could not verify admin.');
+    } finally {
+      setLoading(false);
     }
-    navigate('/admin/categories', { replace: true });
   };
 
   return (

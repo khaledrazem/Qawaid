@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { getCategories } from '@/services/backendApi';
 import { useTranslation } from '@/hooks/useTranslation';
 import { GoldDivider } from '@/components/Decorative';
 import type { Category } from '@/types/db';
@@ -35,26 +35,18 @@ export default function SettingsModal({ onClose }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      const cats = (data ?? []) as Category[];
-      setCategories(cats);
-
-      const stored = getSelectedCategories();
-      if (stored) {
-        setSelected(new Set(stored));
-      } else {
-        // Default: all categories selected
-        setSelected(new Set(cats.map((c) => c.id)));
-      }
-
-      setLoading(false);
-    })();
+    getCategories()
+      .then((data) => {
+        const cats = (data ?? []) as Category[];
+        setCategories(cats);
+        const stored = getSelectedCategories();
+        if (stored) {
+          setSelected(new Set(stored));
+        } else {
+          setSelected(new Set(cats.map((c) => c.id)));
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const toggle = (id: string) => {

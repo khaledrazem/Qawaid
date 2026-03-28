@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import {
+  postAnalyze,
+  postPromptDefinition,
+  postAutoLink,
+  getAdminPrompts,
+  createAdminPrompt,
+  patchAdminPrompt,
+  deleteAdminPrompt,
+  deleteAdminPromptDefinitions,
+  deleteAdminPromptDefinition,
+} from '@/services/backendApi';
+import type { AnalyzeWord } from '@/services/backendApi';
+import { getWordSpanAt } from '@/lib/promptWords';
 import type { Prompt, PromptDefinition, Definition } from '@/types/db';
 import type { Difficulty } from '@/types/db';
 
@@ -12,86 +25,183 @@ export default function AdminPrompts() {
   const [newDifficulty, setNewDifficulty] = useState<Difficulty>('medium');
   const [linkDefOpen, setLinkDefOpen] = useState<string | null>(null);
   const [linkDefPromptText, setLinkDefPromptText] = useState('');
-  const [linkDefIsLetter, setLinkDefIsLetter] = useState(false);
-  const [linkDefIndex, setLinkDefIndex] = useState<number | null>(null);
+  const [linkDefWords, setLinkDefWords] = useState<AnalyzeWord[]>([]);
+  const [linkDefWordIndex, setLinkDefWordIndex] = useState<number | null>(null);
   const [linkDefDefinitionId, setLinkDefDefinitionId] = useState('');
   const [linkDefSearch, setLinkDefSearch] = useState('');
+  const [linkDefAnalyzing, setLinkDefAnalyzing] = useState(false);
+  const [linkDefError, setLinkDefError] = useState<string | null>(null);
+  const [editImageOpen, setEditImageOpen] = useState<string | null>(null);
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editImageDefId, setEditImageDefId] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [autoLinkReplace, setAutoLinkReplace] = useState(false);
+  const [autoLinking, setAutoLinking] = useState(false);
+  const [autoLinkResult, setAutoLinkResult] = useState<string | null>(null);
+  const [autoAddId, setAutoAddId] = useState<string | null>(null);
+  const [autoAddMessage, setAutoAddMessage] = useState<string | null>(null);
+  const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null);
 
   const load = async () => {
-    const [promptRes, pdRes, defRes] = await Promise.all([
-      supabase.from('prompts').select('*').order('created_at', { ascending: false }),
-      supabase.from('prompt_definitions').select('*'),
-      supabase.from('definitions').select('*').order('label'),
-    ]);
-    if (promptRes.error || pdRes.error || defRes.error) return;
-    const byPrompt = (pdRes.data ?? []).reduce<Record<string, PromptDefinition[]>>((acc, pd) => {
-      if (!acc[pd.prompt_id]) acc[pd.prompt_id] = [];
-      acc[pd.prompt_id].push(pd);
-      return acc;
-    }, {});
-    setList((promptRes.data ?? []).map((p) => ({ ...p, definitions: byPrompt[p.id] ?? [] })));
-    setDefinitions(defRes.data ?? []);
-    setLoading(false);
+    try {
+      const { prompts, prompt_definitions, definitions: defs } = await getAdminPrompts();
+      const byPrompt = (prompt_definitions ?? []).reduce<Record<string, PromptDefinition[]>>((acc, pd) => {
+        const pid = (pd as { prompt_id: string }).prompt_id;
+        if (!acc[pid]) acc[pid] = [];
+        acc[pid].push(pd as unknown as PromptDefinition);
+        return acc;
+      }, {});
+      setList((prompts ?? []).map((p) => ({ ...p, definitions: byPrompt[(p as { id: string }).id] ?? [] } as Prompt & { definitions?: PromptDefinition[] })));
+      setDefinitions((defs ?? []) as unknown as Definition[]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
   const addPrompt = async () => {
     if (!newText.trim()) return;
-    await supabase.from('prompts').insert({ prompt_text: newText.trim(), difficulty: newDifficulty });
+    await createAdminPrompt(newText.trim(), newDifficulty);
     setAddOpen(false);
     setNewText('');
     load();
   };
 
   const toggleActive = async (row: Prompt) => {
-    await supabase.from('prompts').update({ is_active: !row.is_active }).eq('id', row.id);
+    await patchAdminPrompt(row.id, { is_active: !row.is_active });
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm('Delete this prompt and its definition links?')) return;
-    await supabase.from('prompt_definitions').delete().eq('prompt_id', id);
-    await supabase.from('prompts').delete().eq('id', id);
+    await deleteAdminPrompt(id);
     load();
   };
 
-  const openLinkDef = (promptId: string, promptText: string) => {
+  const openLinkDef = async (promptId: string, promptText: string) => {
     setLinkDefOpen(promptId);
     setLinkDefPromptText(promptText);
-    setLinkDefIsLetter(false);
-    setLinkDefIndex(null);
+    setLinkDefWordIndex(null);
     setLinkDefDefinitionId('');
     setLinkDefSearch('');
+    setLinkDefError(null);
+    setAutoLinkResult(null);
+    setAutoLinkReplace(false);
+    setLinkDefWords([]);
+    setLinkDefAnalyzing(true);
+    try {
+      const res = await postAnalyze(promptText);
+      setLinkDefWords(res.words ?? []);
+    } catch (e) {
+      setLinkDefError(e instanceof Error ? e.message : 'Analyze failed');
+    } finally {
+      setLinkDefAnalyzing(false);
+    }
   };
 
-  const getSplicedWord = (text: string, start: number): string => {
-    const sub = text.slice(start);
-    return sub.split(' ')[0]
-   
+  const runAutoDetect = async () => {
+    if (!linkDefOpen) return;
+    setAutoLinking(true);
+    setAutoLinkResult(null);
+    setLinkDefError(null);
+    try {
+      const res = await postAutoLink(linkDefOpen, autoLinkReplace);
+      await load();
+      const n = res.created?.length ?? 0;
+      setAutoLinkResult(n > 0 ? `Created ${n} link(s). Review below and remove or add as needed.` : 'No new links added (merge kept existing).');
+    } catch (e) {
+      setLinkDefError(e instanceof Error ? e.message : 'Auto-detect failed');
+    } finally {
+      setAutoLinking(false);
+    }
   };
 
-  const handlePromptClick = (index: number) => {
-    setLinkDefIndex(index);
+  const runAutoAddFromGrid = async (promptId: string) => {
+    setAutoAddId(promptId);
+    setAutoAddMessage(null);
+    try {
+      const res = await postAutoLink(promptId, false);
+      await load();
+      const n = res.created?.length ?? 0;
+      setAutoAddMessage(n > 0 ? `Added ${n} link(s) to this prompt.` : 'No new links (merge kept existing).');
+      setTimeout(() => setAutoAddMessage(null), 4000);
+    } catch (e) {
+      setAutoAddMessage(e instanceof Error ? e.message : 'Auto-add failed');
+      setTimeout(() => setAutoAddMessage(null), 4000);
+    } finally {
+      setAutoAddId(null);
+    }
+  };
+
+  const removeAllPromptDefs = async () => {
+    if (!linkDefOpen || !confirm('Remove all definition links from this prompt? You can re-run Auto-detect or add manually.')) return;
+    await deleteAdminPromptDefinitions(linkDefOpen);
+    await load();
+    setAutoLinkResult('All links removed.');
   };
 
   const saveLinkDef = async () => {
-    if (!linkDefOpen || linkDefIndex === null || !linkDefDefinitionId) return;
-    await supabase.from('prompt_definitions').insert({
-      prompt_id: linkDefOpen,
-      definition_id: linkDefDefinitionId,
-      index_start: linkDefIndex,
-      is_letter: linkDefIsLetter,
+    if (!linkDefOpen || linkDefWordIndex === null || !linkDefDefinitionId) return;
+    try {
+      await postPromptDefinition(linkDefOpen, {
+        wordIndex: linkDefWordIndex,
+        definitionId: linkDefDefinitionId,
+        is_letter: false,
+      });
+      setLinkDefOpen(null);
+      load();
+    } catch (e) {
+      setLinkDefError(e instanceof Error ? e.message : 'Save failed');
+    }
+  };
+
+  const openEditImage = (row: Prompt) => {
+    setEditImageOpen(row.id);
+    setEditImageUrl(row.image_url ?? '');
+    setEditImageDefId(row.definition_id ?? '');
+    setImageUploadError(null);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editImageOpen) return;
+    setImageUploading(true);
+    setImageUploadError(null);
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${editImageOpen}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('prompt-images').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('prompt-images').getPublicUrl(path);
+      setEditImageUrl(publicUrl);
+    } catch (err) {
+      setImageUploadError(err instanceof Error ? err.message : 'Upload failed. Ensure bucket "prompt-images" exists and is public.');
+    } finally {
+      setImageUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const saveEditImage = async () => {
+    if (!editImageOpen) return;
+    await patchAdminPrompt(editImageOpen, {
+      image_url: editImageUrl.trim() || undefined,
+      definition_id: editImageDefId || undefined,
     });
-    setLinkDefOpen(null);
+    setEditImageOpen(null);
     load();
   };
 
   const removePromptDef = async (promptDefId: string) => {
     if (!confirm('Remove this definition link from the prompt?')) return;
-    await supabase.from('prompt_definitions').delete().eq('id', promptDefId);
+    await deleteAdminPromptDefinition(promptDefId);
     load();
   };
+
+  const currentPromptLinks = linkDefOpen ? list.find((r) => r.id === linkDefOpen)?.definitions ?? [] : [];
+  const promptTextForModal = linkDefOpen ? list.find((r) => r.id === linkDefOpen)?.prompt_text ?? linkDefPromptText : '';
 
   const filteredDefs = linkDefSearch.trim()
     ? definitions.filter((d) => d.label.toLowerCase().includes(linkDefSearch.toLowerCase()))
@@ -103,7 +213,7 @@ export default function AdminPrompts() {
     <div>
       <h1 className="page-title">Prompts</h1>
       <p className="page-subtitle">
-        Prompt text cannot be edited after creation. Add definitions by linking a word or letter (click on the prompt).
+        Use Edit to link definitions to words. Click a word then select definition, or use Auto-detect (CAMeL) to suggest links for all words.
       </p>
 
       {loading && <p>Loading…</p>}
@@ -129,42 +239,68 @@ export default function AdminPrompts() {
                   <option value="hard">hard</option>
                 </select>
               </div>
-              <button type="button" onClick={addPrompt}>Save</button>
+              <button type="button" onClick={() => addPrompt()}>Save</button>
               <button type="button" onClick={() => { setAddOpen(false); setNewText(''); }} className="btn-cancel">Cancel</button>
             </div>
           )}
 
+          {autoAddMessage && (
+            <p className="text-muted" style={{ marginBottom: 8 }}>{autoAddMessage}</p>
+          )}
           <ul className="item-list">
             {list.map((row) => (
               <li key={row.id} className="padded">
                 <div className="item-row spaced">
                   <strong className="item-name">{row.prompt_text}</strong>
                   <span className="text-muted">{row.difficulty}</span>
-                  {(!row.definitions || row.definitions.length === 0) && (
+                  {row.image_url && <span className="text-muted" title="Visual prompt">🖼</span>}
+                  {(!row.definitions || row.definitions.length === 0) && !row.image_url && (
                     <span title="Prompt has no definitions linked" className="text-warning">⚠ No definitions</span>
                   )}
                   <button type="button" onClick={() => toggleActive(row)}>{row.is_active ? 'Deactivate' : 'Activate'}</button>
-                  <button type="button" onClick={() => openLinkDef(row.id, row.prompt_text)}>Add definition link</button>
+                  <button type="button" onClick={() => openEditImage(row)} className="btn-sm">Image / definition</button>
+                  <button
+                    type="button"
+                    onClick={() => runAutoAddFromGrid(row.id)}
+                    disabled={autoAddId !== null}
+                    className="btn-sm btn-add"
+                    title="Auto-add definition links (CAMeL) without opening Edit"
+                  >
+                    {autoAddId === row.id ? 'Adding…' : 'Auto-add'}
+                  </button>
+                  <button type="button" onClick={() => openLinkDef(row.id, row.prompt_text)}>Edit</button>
                   <button type="button" onClick={() => remove(row.id)} className="btn-delete">Delete</button>
                 </div>
-                {row.definitions && row.definitions.length > 0 && (
-                  <ul className="prompt-defs">
-                    {row.definitions.map((pd) => {
-                      const def = definitions.find((d) => d.id === pd.definition_id);
-                      console.log(pd)
-                      console.log(row)
-
-                      const slice = pd.is_letter
-                        ? row.prompt_text[pd.index_start]
-                        :  getSplicedWord(row.prompt_text, pd.index_start);
-                      return (
-                        <li key={pd.id}>
-                         {slice} → {def?.label ?? pd.definition_id}
-                          <button type="button" onClick={() => removePromptDef(pd.id)} className="btn-sm">Remove</button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                {(row.definitions?.length ?? 0) > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="prompt-expand-btn"
+                      onClick={() => setExpandedPromptId((id) => (id === row.id ? null : row.id))}
+                      aria-expanded={expandedPromptId === row.id}
+                    >
+                      <span className="prompt-expand-icon">{expandedPromptId === row.id ? '▼' : '▶'}</span>
+                      {row.definitions!.length} definition{row.definitions!.length !== 1 ? 's' : ''}
+                    </button>
+                    {expandedPromptId === row.id && (
+                      <ul className="prompt-defs">
+                        {row.definitions!.map((pd) => {
+                          const def = definitions.find((d) => d.id === pd.definition_id);
+                          const slice = pd.is_letter
+                            ? row.prompt_text[pd.index_start]
+                            : pd.index_end != null
+                              ? row.prompt_text.slice(pd.index_start, pd.index_end)
+                              : getWordSpanAt(row.prompt_text, pd.index_start)?.word ?? row.prompt_text.slice(pd.index_start).split(/\s/)[0];
+                          return (
+                            <li key={pd.id}>
+                              {slice} → {def?.label ?? pd.definition_id}
+                              <button type="button" onClick={() => removePromptDef(pd.id)} className="btn-sm">Remove</button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </>
                 )}
               </li>
             ))}
@@ -174,49 +310,74 @@ export default function AdminPrompts() {
             <div className="modal-overlay">
               <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <h3>Link definition to prompt</h3>
-                <label>
-                  <input type="checkbox" checked={linkDefIsLetter} onChange={(e) => setLinkDefIsLetter(e.target.checked)} />
-                  {' '}Select by letter (otherwise by word)
-                </label>
-                <p>Click a {linkDefIsLetter ? 'character' : 'word start'} in the prompt:</p>
-                <div className="prompt-picker">
-                  {linkDefIsLetter
-                    ? linkDefPromptText.split('').map((char, i) => (
-                        <span
-                          key={i}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handlePromptClick(i)}
-                          onKeyDown={(e) => e.key === 'Enter' && handlePromptClick(i)}
-                          className={`prompt-char${linkDefIndex === i ? ' selected' : ''}`}
-                        >
-                          {char}
-                        </span>
-                      ))
-                    : (() => {
-                        const parts: { start: number; word: string }[] = [];
-                        let start = 0;
-                        const spaceOrPunct = /[\s,.;:!?]/;
-                        for (let i = 0; i <= linkDefPromptText.length; i++) {
-                          if (i === linkDefPromptText.length || spaceOrPunct.test(linkDefPromptText[i])) {
-                            if (i > start) parts.push({ start, word: linkDefPromptText.slice(start, i) });
-                            start = i + 1;
-                          }
-                        }
-                        return parts.map(({ start, word }) => (
+                <p className="text-muted">Use Auto-detect to link all words at once (by label and CAMeL morphology), or click a word below and pick a definition to add one link.</p>
+
+                <div className="form-row" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    onClick={runAutoDetect}
+                    disabled={linkDefAnalyzing || autoLinking}
+                    className="btn-add"
+                  >
+                    {autoLinking ? 'Detecting…' : 'Auto-detect definitions'}
+                  </button>
+                  <label style={{ marginLeft: 12 }}>
+                    <input type="checkbox" checked={autoLinkReplace} onChange={(e) => setAutoLinkReplace(e.target.checked)} />
+                    {' '}Replace all (otherwise merge with existing)
+                  </label>
+                </div>
+                {autoLinkResult && <p className="text-muted">{autoLinkResult}</p>}
+
+                <h4 style={{ marginTop: 16, marginBottom: 8 }}>Current links</h4>
+                {currentPromptLinks.length > 0 ? (
+                  <>
+                    <button type="button" onClick={removeAllPromptDefs} className="btn-sm btn-cancel" style={{ marginBottom: 8 }}>
+                      Remove all links
+                    </button>
+                    <ul className="prompt-defs" style={{ marginBottom: 16 }}>
+                      {currentPromptLinks.map((pd) => {
+                        const def = definitions.find((d) => d.id === pd.definition_id);
+                        const slice = pd.is_letter
+                          ? promptTextForModal[pd.index_start]
+                          : pd.index_end != null
+                            ? promptTextForModal.slice(pd.index_start, pd.index_end)
+                            : getWordSpanAt(promptTextForModal, pd.index_start)?.word ?? promptTextForModal.slice(pd.index_start).split(/\s/)[0];
+                        return (
+                          <li key={pd.id}>
+                            {slice} → {def?.label ?? pd.definition_id}
+                            <button type="button" onClick={() => removePromptDef(pd.id)} className="btn-sm">Remove</button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="text-muted" style={{ marginBottom: 16 }}>No links yet. Use Auto-detect or add manually below.</p>
+                )}
+
+                <h4 style={{ marginBottom: 8 }}>Add a link manually</h4>
+                {linkDefAnalyzing && <p className="text-muted">Analyzing…</p>}
+                {linkDefError && <p className="text-error">{linkDefError}</p>}
+                {!linkDefAnalyzing && linkDefWords.length > 0 && (
+                  <>
+                    <div className="prompt-picker">
+                      {linkDefWords.map((w, i) => (
+                        <span key={w.start}>
+                          {i > 0 && ' '}
                           <span
-                            key={start}
                             role="button"
                             tabIndex={0}
-                            onClick={() => handlePromptClick(start)}
-                            onKeyDown={(e) => e.key === 'Enter' && handlePromptClick(start)}
-                            className={`prompt-word${linkDefIndex === start ? ' selected' : ''}`}
+                            onClick={() => setLinkDefWordIndex(i)}
+                            onKeyDown={(e) => e.key === 'Enter' && setLinkDefWordIndex(i)}
+                            className={`prompt-word${linkDefWordIndex === i ? ' selected' : ''}`}
                           >
-                            {word}
+                            {w.word}
                           </span>
-                        ));
-                      })()}
-                </div>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <div className="form-row">
                   <input
                     placeholder="Search definition..."
@@ -237,8 +398,39 @@ export default function AdminPrompts() {
                   </select>
                 </div>
                 <div className="modal-actions">
-                  <button type="button" onClick={saveLinkDef} disabled={linkDefIndex === null || !linkDefDefinitionId}>Save link</button>
+                  <button type="button" onClick={saveLinkDef} disabled={linkDefWordIndex === null || !linkDefDefinitionId}>Save link</button>
                   <button type="button" onClick={() => setLinkDefOpen(null)} className="btn-cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {editImageOpen && (
+            <div className="modal-overlay">
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <h3>Prompt image &amp; definition (visual MCQ)</h3>
+                <div className="form-row">
+                  <label>Upload image</label>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} disabled={imageUploading} />
+                  {imageUploading && <span className="text-muted">Uploading…</span>}
+                  {imageUploadError && <span className="text-error">{imageUploadError}</span>}
+                </div>
+                <div className="form-row">
+                  <label>Or image URL</label>
+                  <input value={editImageUrl} onChange={(e) => setEditImageUrl(e.target.value)} placeholder="https://…" className="input-full" />
+                </div>
+                <div className="form-row">
+                  <label>Definition (for whole image)</label>
+                  <select value={editImageDefId} onChange={(e) => setEditImageDefId(e.target.value)}>
+                    <option value="">—</option>
+                    {definitions.map((d) => (
+                      <option key={d.id} value={d.id}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" onClick={saveEditImage}>Save</button>
+                  <button type="button" onClick={() => setEditImageOpen(null)} className="btn-cancel">Cancel</button>
                 </div>
               </div>
             </div>

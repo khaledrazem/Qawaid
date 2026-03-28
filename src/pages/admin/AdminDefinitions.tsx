@@ -1,64 +1,72 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import {
+  getAdminDefinitions,
+  createAdminDefinition,
+  patchAdminDefinition,
+  deleteAdminDefinition,
+} from '@/services/backendApi';
 import type { Definition, Category } from '@/types/db';
+
+interface CategoryDefRow {
+  category_id: string;
+  definition_id: string;
+}
 
 export default function AdminDefinitions() {
   const [list, setList] = useState<Definition[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryDefs, setCategoryDefs] = useState<CategoryDefRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [editCategoryIds, setEditCategoryIds] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [newCategoryIds, setNewCategoryIds] = useState<string[]>([]);
 
   const load = async () => {
-    const [defRes, catRes] = await Promise.all([
-      supabase.from('definitions').select('*').order('label'),
-      supabase.from('categories').select('*').order('name'),
-    ]);
-    if (defRes.error || catRes.error) return;
-    setList(defRes.data ?? []);
-    setCategories(catRes.data ?? []);
-    setLoading(false);
+    try {
+      const { definitions: defs, categories: cats, category_definitions: cd } = await getAdminDefinitions();
+      setList((defs ?? []) as Definition[]);
+      setCategories((cats ?? []) as Category[]);
+      setCategoryDefs((cd ?? []) as CategoryDefRow[]);
+    } catch {
+      // keep previous list
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
   const toggleActive = async (row: Definition) => {
-    await supabase.from('definitions').update({ is_active: !row.is_active }).eq('id', row.id);
+    await patchAdminDefinition(row.id, { is_active: !row.is_active });
     load();
   };
 
-  const startEdit = async (row: Definition) => {
-    const { data } = await supabase.from('category_definitions').select('category_id').eq('definition_id', row.id);
-    setEditCategoryIds((data ?? []).map((r) => r.category_id));
+  const startEdit = (row: Definition) => {
+    const ids = categoryDefs.filter((r) => r.definition_id === row.id).map((r) => r.category_id);
+    setEditCategoryIds(ids);
     setEditLabel(row.label);
+    setEditDescription(row.description ?? '');
     setEditingId(row.id);
   };
 
   const saveEdit = async () => {
     if (!editingId) return;
-    await supabase.from('definitions').update({ label: editLabel }).eq('id', editingId);
-    await supabase.from('category_definitions').delete().eq('definition_id', editingId);
-    if (editCategoryIds.length) {
-      await supabase.from('category_definitions').insert(
-        editCategoryIds.map((category_id) => ({ category_id, definition_id: editingId }))
-      );
-    }
+    await patchAdminDefinition(editingId, {
+      label: editLabel,
+      description: editDescription || null,
+      category_ids: editCategoryIds,
+    });
     setEditingId(null);
     load();
   };
 
   const addDefinition = async () => {
     if (!newLabel.trim()) return;
-    const { data } = await supabase.from('definitions').insert({ label: newLabel.trim() }).select('id').single();
-    if (data && newCategoryIds.length) {
-      await supabase.from('category_definitions').insert(
-        newCategoryIds.map((category_id) => ({ category_id, definition_id: data.id }))
-      );
-    }
+    await createAdminDefinition(newLabel.trim(), newCategoryIds);
     setAddOpen(false);
     setNewLabel('');
     setNewCategoryIds([]);
@@ -68,10 +76,7 @@ export default function AdminDefinitions() {
   const remove = async (row: Definition) => {
     const msg = 'This definition may be used by questions and prompt_definitions. Delete anyway (cascade) or cancel to choose a replacement in a future version.';
     if (!confirm(msg)) return;
-    await supabase.from('category_definitions').delete().eq('definition_id', row.id);
-    await supabase.from('prompt_definitions').delete().eq('definition_id', row.id);
-    await supabase.from('questions').delete().eq('correct_definition_id', row.id);
-    await supabase.from('definitions').delete().eq('id', row.id);
+    await deleteAdminDefinition(row.id);
     load();
   };
 
@@ -121,6 +126,7 @@ export default function AdminDefinitions() {
                   {editingId === row.id ? (
                     <>
                       <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="Label" className="inline-input" />
+                      <input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Description" className="inline-input" style={{ minWidth: 160 }} />
                       <select
                         multiple
                         value={editCategoryIds}

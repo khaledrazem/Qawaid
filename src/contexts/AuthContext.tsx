@@ -20,6 +20,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { supabase } from '@/lib/supabase';
 import { ensureUserExists, type AppUser } from '@/services/userService';
 import type { Session } from '@supabase/supabase-js';
@@ -32,9 +34,11 @@ interface AuthState {
   session: Session | null;
   user: AppUser | null;
   loading: boolean;
+  authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -47,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const initStarted = useRef(false);
 
@@ -93,11 +98,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /* ---- Actions ---- */
 
-  const signInWithGoogle = useCallback(async () => {
-    const redirectTo = import.meta.env.VITE_APP_URL
-      ? `${import.meta.env.VITE_APP_URL}/auth/callback`
-      : `${window.location.origin}/auth/callback`;
+  const clearAuthError = useCallback(() => setAuthError(null), []);
 
+  const signInWithGoogle = useCallback(async () => {
+    setAuthError(null);
+    if (Capacitor.isNativePlatform()) {
+      // In-app native Google Sign-In (no browser). Plugin shows account picker inside the app.
+      try {
+        GoogleAuth.initialize(); // uses androidClientId + serverClientId from capacitor.config
+        const result = await GoogleAuth.signIn();
+        const idToken = result?.authentication?.idToken;
+        if (!idToken) {
+          console.warn('[AuthContext] Native Google Sign-In: no id token (user may have cancelled)');
+          return;
+        }
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        });
+        if (error) {
+          console.error('[AuthContext] signInWithIdToken failed — full error:', error);
+          const errObj = error as { message?: string; code?: string; status?: number; name?: string };
+          console.error('[AuthContext] signInWithIdToken details:', {
+            message: errObj.message,
+            code: errObj.code,
+            status: errObj.status,
+            name: errObj.name,
+          });
+          const detail = [
+            error.message || 'Login failed',
+            (error as { code?: string }).code && `Code: ${(error as { code?: string }).code}`,
+            (error as { status?: number }).status != null && `Status: ${(error as { status?: number }).status}`,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          setAuthError(detail);
+          return;
+        }
+        // Supabase may not fire onAuthStateChange immediately on native; set session/user from response so UI updates.
+        if (data?.session) {
+          setSession(data.session);
+          sessionRef.current = data.session;
+          if (data.session.user) {
+            try {
+              const appUser = await ensureUserExists(data.session.user);
+              setUser(appUser);
+            } catch (err) {
+              console.warn('[AuthContext] ensureUserExists after signInWithIdToken:', err);
+              setUser(null);
+            }
+          }
+          setLoading(false);
+        }
+      } catch (err) {
+        const parts: string[] = [];
+        const errObj = err && typeof err === 'object' ? (err as { message?: string; code?: string; status?: number }) : null;
+        const msg = errObj?.message ?? (err instanceof Error ? err.message : String(err));
+        const code = errObj?.code ?? (err as { code?: string })?.code;
+        const status = errObj?.status ?? (err as { status?: number })?.status;
+
+        parts.push(msg || 'Google sign-in failed');
+        if (code) parts.push(`Code: ${code}`);
+        if (status != null) parts.push(`Status: ${status}`);
+        if (code === '10' || msg === 'Something went wrong') {
+          parts.push('(Android: add your app SHA-1 and package name to the Android OAuth client in Google Cloud Console; see docs)');
+        }
+        const message = parts.join(' · ');
+        setAuthError(message);
+        console.error('[AuthContext] Native Google Sign-In failed — full error:', err);
+        console.error('[AuthContext] error details:', { message: msg, code, status, raw: err });
+        if (err instanceof Error && err.stack) console.error('[AuthContext] error.stack:', err.stack);
+        return;
+      }
+      return;
+    }
+
+    // Web: OAuth redirect flow
+    const redirectTo = `${window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -123,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, loading, signInWithGoogle, signOut, refreshUser }}
+      value={{ session, user, loading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError }}
     >
       {children}
     </AuthContext.Provider>

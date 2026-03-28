@@ -1,0 +1,12 @@
+# Qawaid backend — question engine
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+supabase>=2.0.0
+python-dotenv>=1.0.0
+PyJWT>=2.8.0
+
+# Optional: CAMeL Tools for Arabic tokenization + morphology (auto-detect definitions).
+# Install only if you have Python 3.8–3.12 (camel-kenlm fails on 3.13+ / some Windows):
+#   pip install -r requirements-camel.txt
+# Then: camel_data -i morphology-db-msa-r13
+# Without camel-tools, tokenizer uses whitespace and auto-detect uses label/indicator only.
