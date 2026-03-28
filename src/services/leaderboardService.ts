@@ -14,9 +14,7 @@ function currentMonth(): string {
 
 /**
  * Fetch the monthly leaderboard for the current month.
- *
- * @param userId - (optional) current user's ID for surrounding entries.
- *                 null for guests.
+ * User context comes from the Supabase JWT (Authorization header).
  */
 export async function fetchLeaderboard(): Promise<LeaderboardDTO> {
   const month = currentMonth();

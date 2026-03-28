@@ -30,8 +30,10 @@ export function useTranslation() {
   const { locale } = useLanguage();
   const strings = catalogs[locale];
 
-  function t(key: string): string {
-    return resolve(key, strings);
+  function t(key: string, defaultValue?: string): string {
+    const v = resolve(key, strings);
+    if (v === key && defaultValue !== undefined) return defaultValue;
+    return v;
   }
 
   return { t };

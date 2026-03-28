@@ -337,7 +337,10 @@ function QuestionView({
         </div>
       )}
 
-      {(['MCQ', 'visual_mcq', 'mcq_fillin'] as const).includes(question.questionType) && question.possibleAnswers?.length ? (
+      {(question.questionType === 'MCQ'
+        || question.questionType === 'visual_mcq'
+        || question.questionType === 'mcq_fillin')
+        && question.possibleAnswers?.length ? (
         <div className="mcq-options">
           {question.possibleAnswers.map((opt) => {
             let cls = 'mcq-option';

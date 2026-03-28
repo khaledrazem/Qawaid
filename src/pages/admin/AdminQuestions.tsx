@@ -24,8 +24,8 @@ export default function AdminQuestions() {
   const load = async () => {
     try {
       const { questions: qs, categories: cats } = await getAdminQuestions();
-      setList((qs ?? []) as Question[]);
-      setCategories((cats ?? []) as Category[]);
+      setList((qs ?? []) as unknown as Question[]);
+      setCategories((cats ?? []) as unknown as Category[]);
     } finally {
       setLoading(false);
     }

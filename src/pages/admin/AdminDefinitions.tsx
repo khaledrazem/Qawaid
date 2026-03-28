@@ -28,8 +28,8 @@ export default function AdminDefinitions() {
   const load = async () => {
     try {
       const { definitions: defs, categories: cats, category_definitions: cd } = await getAdminDefinitions();
-      setList((defs ?? []) as Definition[]);
-      setCategories((cats ?? []) as Category[]);
+      setList((defs ?? []) as unknown as Definition[]);
+      setCategories((cats ?? []) as unknown as Category[]);
       setCategoryDefs((cd ?? []) as CategoryDefRow[]);
     } catch {
       // keep previous list

@@ -39,8 +39,8 @@ export default function AdminCategories() {
         acc[row.category_id] = (acc[row.category_id] ?? 0) + 1;
         return acc;
       }, {});
-      setList(((cats ?? []) as Category[]).map((c) => ({ ...c, definition_count: defCount[c.id] ?? 0 })));
-      setDefinitions((defs ?? []) as Definition[]);
+      setList(((cats ?? []) as unknown as Category[]).map((c) => ({ ...c, definition_count: defCount[c.id] ?? 0 })));
+      setDefinitions((defs ?? []) as unknown as Definition[]);
     } finally {
       setLoading(false);
     }

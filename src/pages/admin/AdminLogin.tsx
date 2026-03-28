@@ -18,7 +18,7 @@ export default function AdminLogin() {
     setLoading(true);
     const raw = username.trim();
     const email = raw.includes('@') ? raw : `${raw}@${ADMIN_AUTH_DOMAIN}`;
-    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
     if (err) {
       setLoading(false);
       setError(err.message);

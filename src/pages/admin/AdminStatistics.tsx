@@ -22,7 +22,7 @@ export default function AdminStatistics() {
 
   if (loading || !stats) return <p>Loading…</p>;
 
-  const statCard = (title: string, subtitle?: string, entries: [string, number][], accent?: boolean) => (
+  const statCard = (title: string, entries: [string, number][], subtitle?: string, accent?: boolean) => (
     <div className={`stats-card card${accent ? ' stats-card--accent' : ''}`}>
       <h3 className="stats-card__title">{title}</h3>
       {subtitle && <p className="stats-card__subtitle text-muted">{subtitle}</p>}
@@ -55,15 +55,15 @@ export default function AdminStatistics() {
         </div>
       </div>
       <div className="stats-grid">
-        {statCard('Prompts by difficulty', undefined, Object.entries(stats.promptsByDifficulty))}
+        {statCard('Prompts by difficulty', Object.entries(stats.promptsByDifficulty))}
         {statCard(
           'Prompts by category',
+          Object.entries(stats.promptsByCategory),
           'Prompts with at least one link to a definition in that category',
-          Object.entries(stats.promptsByCategory)
         )}
-        {statCard('Questions by category', undefined, Object.entries(stats.questionsByCategory))}
-        {statCard('Questions by type', undefined, Object.entries(stats.questionsByType))}
-        {statCard('Definitions by category', undefined, Object.entries(stats.definitionsByCategory), true)}
+        {statCard('Questions by category', Object.entries(stats.questionsByCategory))}
+        {statCard('Questions by type', Object.entries(stats.questionsByType))}
+        {statCard('Definitions by category', Object.entries(stats.definitionsByCategory), undefined, true)}
       </div>
     </div>
   );

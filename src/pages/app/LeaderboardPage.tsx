@@ -23,7 +23,7 @@ export default function LeaderboardPage() {
     (async () => {
       setLoading(true);
       const [monthlyData, globalData] = await Promise.all([
-        fetchLeaderboard(user?.id ?? null),
+        fetchLeaderboard(),
         fetchGlobalLeaderboard(),
       ]);
       if (cancelled) return;

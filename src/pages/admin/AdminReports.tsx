@@ -14,7 +14,7 @@ export default function AdminReports() {
   const load = async () => {
     try {
       const { reports } = await getAdminReports();
-      setList((reports ?? []) as ReportWithPrompt[]);
+      setList((reports ?? []) as unknown as ReportWithPrompt[]);
     } finally {
       setLoading(false);
     }
