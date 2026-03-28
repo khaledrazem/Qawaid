@@ -20,6 +20,8 @@ RUN camel_data -i morphology-db-msa-r13 \
 # Application
 COPY . .
 
-EXPOSE 8000
+# Cloud Run sets PORT (default 8080). Local: docker run -e PORT=8000 -p 8000:8000 …
+EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
+# JSON CMD cannot expand $PORT; use shell so we bind the port Cloud Run expects.
+CMD ["sh", "-c", "exec python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"]
