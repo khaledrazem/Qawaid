@@ -14,12 +14,21 @@ except ImportError:
 # Support both backend (SUPABASE_*) and root .env (VITE_SUPABASE_URL, SUPABASE_SECRET_KEY)
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SECRET_KEY", "")
+# Browsers send Authorization — no "*". These origins are always merged unless CORS_STRICT=1.
+# (Origin has no trailing slash; match what the browser sends.)
+_LOCAL_DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+_DEFAULT_FRONTEND_ORIGINS = ("https://qawaid-iota.vercel.app",)
+_CORS_ALWAYS_MERGE = _LOCAL_DEV_ORIGINS + _DEFAULT_FRONTEND_ORIGINS
 _raw = os.environ.get("CORS_ORIGINS", "*").strip()
-# When using allow_credentials=True, browser forbids "*"; use explicit dev origins.
+_cors_strict = os.environ.get("CORS_STRICT", "").strip().lower() in ("1", "true", "yes")
 if _raw == "*" or not _raw:
-    CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    CORS_ORIGINS = list(_CORS_ALWAYS_MERGE)
 else:
-    CORS_ORIGINS = [o.strip() for o in _raw.split(",") if o.strip()]
+    from_env = [o.strip() for o in _raw.split(",") if o.strip()]
+    if _cors_strict:
+        CORS_ORIGINS = from_env
+    else:
+        CORS_ORIGINS = list(dict.fromkeys(list(from_env) + list(_CORS_ALWAYS_MERGE)))
 SEED_SECRET = os.environ.get("SEED_SECRET", "")
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
 SUPABASE_JWT_ISSUER = os.environ.get("SUPABASE_JWT_ISSUER", "").strip()
