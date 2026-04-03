@@ -4,7 +4,7 @@ import {
   postAnalyze,
   postPromptDefinition,
   postAutoLink,
-  postAdminAutoLinkAll,
+  postAdminAutoLinkAllStream,
   getAdminPrompts,
   createAdminPrompt,
   patchAdminPrompt,
@@ -126,26 +126,52 @@ export default function AdminPrompts() {
   const runAutoLinkAllPrompts = async () => {
     const msg =
       'Run auto-detect (CAMeL) on all prompts? New links are merged: existing span+definition pairs are kept. Duplicates are skipped.\n\n' +
+      'The request stays open until all batches finish (needed so the server keeps processing).\n\n' +
       (bulkReplace
         ? 'Replace mode is ON: existing links on each prompt will be removed before re-adding.'
         : 'Replace mode is OFF: only new links are added.');
     if (!confirm(msg)) return;
     setBulkAutoLinking(true);
-    setBulkAutoLinkResult(null);
+    setBulkAutoLinkResult('Starting…');
     try {
-      const res = await postAdminAutoLinkAll({
-        replace: bulkReplace,
-        only_active: bulkOnlyActive,
-      });
-      if (res.status === 'noop') {
-        setBulkAutoLinkResult(res.message);
-      } else {
-        setBulkAutoLinkResult(
-          `Queued: ${res.prompt_count} prompt(s) processing in the background (${res.batch_size} per batch). ` +
-            'Refresh this page in a few minutes to see new links. Progress is logged on the server.',
-        );
-        void load();
-      }
+      await postAdminAutoLinkAllStream(
+        { replace: bulkReplace, only_active: bulkOnlyActive },
+        (evt) => {
+          if (evt.status === 'noop') {
+            setBulkAutoLinkResult(String((evt as { message?: string }).message ?? 'Nothing to process'));
+            return;
+          }
+          const ev = evt.event as string | undefined;
+          if (ev === 'started') {
+            const n = evt.prompt_count as number;
+            const tb = evt.total_batches as number;
+            setBulkAutoLinkResult(`Running ${n} prompts in ${tb} batches (keep this tab open)…`);
+          } else if (ev === 'batch') {
+            const bi = evt.batch_index as number;
+            const tb = evt.total_batches as number;
+            const lt = evt.links_this_batch as number;
+            const tot = evt.links_total as number;
+            const errN = evt.errors_total as number;
+            const sec = evt.elapsed_sec as number;
+            const line = `Batch ${bi}/${tb}: +${lt} links this batch (total ${tot} links, ${errN} prompt errors) — ${sec}s elapsed`;
+            setBulkAutoLinkResult(line);
+            console.info('[auto-link-all]', line);
+          } else if (ev === 'complete') {
+            const tot = evt.links_total as number;
+            const errs = (evt.errors as unknown[])?.length ?? 0;
+            const sec = evt.elapsed_sec as number;
+            setBulkAutoLinkResult(
+              `Finished: ${tot} new links, ${errs} prompt-level errors, ${sec}s total. Refreshing list…`,
+            );
+            console.info('[auto-link-all] complete', evt);
+          } else if (ev === 'error' || ev === 'fatal') {
+            const detail = (evt.detail as string) || (evt.error as string) || JSON.stringify(evt);
+            setBulkAutoLinkResult(`Stopped: ${detail}`);
+            console.error('[auto-link-all]', evt);
+          }
+        },
+      );
+      await load();
     } catch (e) {
       setBulkAutoLinkResult(e instanceof Error ? e.message : 'Bulk auto-link failed');
     } finally {

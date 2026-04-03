@@ -3,15 +3,17 @@ Qawaid backend API: playable, batch, analyze, suggest-links, seed.
 """
 
 import json
+import logging
 import os
 import threading
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Path as ApiPath, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
@@ -38,6 +40,7 @@ from suggest_links import suggest_links
 from auto_detect import auto_detect_all
 
 app = FastAPI(title="Qawaid Backend")
+logger = logging.getLogger(__name__)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -100,6 +103,9 @@ class AdminAutoLinkAllRequest(BaseModel):
     """Bulk auto-link: same merge rules as single prompt (skip duplicate span + definition)."""
     replace: bool = False
     only_active: bool = False  # if True, skip prompts where is_active is false
+    # True (default): NDJSON stream — keeps HTTP connection open (needed on Cloud Run for full run).
+    # False: return 202 immediately and run in a background thread (may stall if host throttles CPU after response).
+    stream: bool = True
 
 
 class UserContext(BaseModel):
@@ -797,38 +803,141 @@ def _end_auto_link_all() -> None:
         _auto_link_all_running = False
 
 
-def _bulk_auto_link_all_worker(replace: bool, work: List[Tuple[str, str]]) -> None:
+def _bulk_auto_link_all_iter(
+    replace: bool,
+    work: List[Tuple[str, str]],
+):
     """
-    Background job: run auto-link for each prompt. Work is processed in batches of
-    AUTO_LINK_ALL_BATCH_SIZE; DB writes flush per insert (Supabase client).
+    Yields event dicts: started → batch (per chunk) → complete.
+    Single implementation for streaming HTTP and background thread (same batching, no artificial cap).
     """
+    n = len(work)
+    t0 = time.monotonic()
+    if n == 0:
+        yield {
+            "event": "complete",
+            "links_total": 0,
+            "errors": [],
+            "prompts_processed": 0,
+            "elapsed_sec": 0.0,
+        }
+        logger.info("auto-link-all: no prompts to process")
+        return
+
+    batches = (n + AUTO_LINK_ALL_BATCH_SIZE - 1) // AUTO_LINK_ALL_BATCH_SIZE
+    logger.info(
+        "auto-link-all START prompt_count=%s total_batches=%s batch_size=%s replace=%s",
+        n,
+        batches,
+        AUTO_LINK_ALL_BATCH_SIZE,
+        replace,
+    )
+
     sb = _get_sb()
     definitions = _get_all_definitions_with_categories()
+    yield {
+        "event": "started",
+        "prompt_count": n,
+        "total_batches": batches,
+        "batch_size": AUTO_LINK_ALL_BATCH_SIZE,
+    }
+
     total_created = 0
     errors: List[Dict[str, str]] = []
-    n = len(work)
-    if n == 0:
-        print("[auto-link-all] no work items")
-        return
-    batches = (n + AUTO_LINK_ALL_BATCH_SIZE - 1) // AUTO_LINK_ALL_BATCH_SIZE
+    prompts_processed = 0
+
     for bi in range(batches):
         start = bi * AUTO_LINK_ALL_BATCH_SIZE
         chunk = work[start : start + AUTO_LINK_ALL_BATCH_SIZE]
         batch_created = 0
+        logger.info(
+            "auto-link-all BATCH_BEGIN batch=%s/%s prompts_in_batch=%s",
+            bi + 1,
+            batches,
+            len(chunk),
+        )
         for pid, ptext in chunk:
             try:
                 created = _run_auto_link(sb, pid, ptext, replace, definitions, quiet=True)
                 c = len(created)
                 batch_created += c
                 total_created += c
+                prompts_processed += 1
             except Exception as e:
-                errors.append({"prompt_id": pid, "detail": f"{type(e).__name__}: {e}"})
-                print(f"[auto-link-all] prompt {pid} failed: {e}")
-        print(
-            f"[auto-link-all] batch {bi + 1}/{batches} saved ({len(chunk)} prompts), "
-            f"+{batch_created} links this batch, {total_created} cumulative links, {len(errors)} errors so far",
+                err = {"prompt_id": pid, "detail": f"{type(e).__name__}: {e}"}
+                errors.append(err)
+                logger.warning("auto-link-all PROMPT_FAIL id=%s %s", pid, e)
+
+        elapsed = time.monotonic() - t0
+        batch_evt = {
+            "event": "batch",
+            "batch_index": bi + 1,
+            "total_batches": batches,
+            "prompts_in_batch": len(chunk),
+            "prompts_processed_total": prompts_processed,
+            "links_this_batch": batch_created,
+            "links_total": total_created,
+            "errors_total": len(errors),
+            "elapsed_sec": round(elapsed, 2),
+        }
+        yield batch_evt
+        logger.info(
+            "auto-link-all BATCH_END batch=%s/%s links_batch=%s links_total=%s errors_total=%s elapsed_sec=%.2f",
+            bi + 1,
+            batches,
+            batch_created,
+            total_created,
+            len(errors),
+            elapsed,
         )
-    print(f"[auto-link-all] finished: {total_created} new links, {len(errors)} prompt-level errors")
+
+    elapsed = time.monotonic() - t0
+    yield {
+        "event": "complete",
+        "links_total": total_created,
+        "errors": errors,
+        "prompts_processed": prompts_processed,
+        "elapsed_sec": round(elapsed, 2),
+    }
+    logger.info(
+        "auto-link-all COMPLETE links_total=%s prompts_processed=%s prompt_errors=%s elapsed_sec=%.2f — job finished normally",
+        total_created,
+        prompts_processed,
+        len(errors),
+        elapsed,
+    )
+
+
+def _ndjson_stream_auto_link_all(replace: bool, work: List[Tuple[str, str]]):
+    """Encode iterator events as NDJSON; release lock on exit or client disconnect."""
+    acquired = False
+    try:
+        if not _try_begin_auto_link_all():
+            yield (json.dumps({"event": "error", "detail": "already_running"}, ensure_ascii=False) + "\n").encode(
+                "utf-8"
+            )
+            logger.warning("auto-link-all stream rejected: job already running")
+            return
+        acquired = True
+        logger.info("auto-link-all stream: lock acquired, beginning NDJSON stream")
+        for evt in _bulk_auto_link_all_iter(replace, work):
+            line = json.dumps(evt, ensure_ascii=False) + "\n"
+            yield line.encode("utf-8")
+    except GeneratorExit:
+        logger.warning(
+            "auto-link-all stream aborted (client disconnected or proxy closed). "
+            "Partial progress is saved per prompt; re-run merge mode to continue."
+        )
+        raise
+    except Exception as e:
+        logger.exception("auto-link-all stream fatal: %s", e)
+        yield (json.dumps({"event": "fatal", "error": f"{type(e).__name__}: {e}"}, ensure_ascii=False) + "\n").encode(
+            "utf-8"
+        )
+    finally:
+        if acquired:
+            _end_auto_link_all()
+            logger.info("auto-link-all stream: lock released (finally)")
 
 
 @app.post("/api/prompts/{prompt_id}/definitions")
@@ -995,6 +1104,17 @@ def admin_auto_link_all(
             "batch_size": AUTO_LINK_ALL_BATCH_SIZE,
         }
 
+    if body.stream:
+        return StreamingResponse(
+            _ndjson_stream_auto_link_all(replace, work),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     if not _try_begin_auto_link_all():
         raise HTTPException(
             status_code=409,
@@ -1003,20 +1123,21 @@ def admin_auto_link_all(
 
     def run_job() -> None:
         try:
-            _bulk_auto_link_all_worker(replace, work)
+            for _evt in _bulk_auto_link_all_iter(replace, work):
+                pass
         except Exception as e:
-            print(f"[auto-link-all] fatal: {e}")
-            traceback.print_exc()
+            logger.exception("auto-link-all background thread failed: %s", e)
         finally:
             _end_auto_link_all()
+            logger.info("auto-link-all background: lock released (finally)")
 
-    threading.Thread(target=run_job, daemon=True).start()
+    threading.Thread(target=run_job, daemon=False, name="auto-link-all-bg").start()
 
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={
             "status": "accepted",
-            "message": "Processing prompts in the background (batched saves). Check server logs for progress.",
+            "message": "Processing in background (stream=false). Prefer stream=true so the host keeps CPU until done.",
             "prompt_count": len(work),
             "batch_size": AUTO_LINK_ALL_BATCH_SIZE,
         },

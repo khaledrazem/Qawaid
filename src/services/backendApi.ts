@@ -236,7 +236,7 @@ export async function getAdminPrompts(): Promise<{
   return backendRequestWithAuth('/api/admin/prompts', { method: 'GET' });
 }
 
-/** Immediate response: job runs in background on the server (batched). */
+/** No prompts, or legacy stream:false JSON response. */
 export type AdminAutoLinkAllResult =
   | {
       status: 'accepted';
@@ -251,15 +251,68 @@ export type AdminAutoLinkAllResult =
       batch_size: number;
     };
 
-/** Queue CAMeL auto-detect for all prompts. Returns 202 + accepted (or noop). Admin only. */
+/** Non-streaming: 202 + background thread (may stall on some hosts). */
 export async function postAdminAutoLinkAll(body?: {
   replace?: boolean;
   only_active?: boolean;
+  stream?: boolean;
 }): Promise<AdminAutoLinkAllResult> {
   return backendRequestWithAuth<AdminAutoLinkAllResult>('/api/admin/prompts/auto-link-all', {
     method: 'POST',
-    body: JSON.stringify(body ?? {}),
+    body: JSON.stringify({ ...body, stream: false }),
   });
+}
+
+/**
+ * Streaming NDJSON (default server mode): keeps HTTP open until all batches finish.
+ * Required for Cloud Run etc. where CPU stops after the response is sent.
+ */
+export async function postAdminAutoLinkAllStream(
+  body: { replace?: boolean; only_active?: boolean },
+  onEvent: (evt: Record<string, unknown>) => void,
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE}/api/admin/prompts/auto-link-all`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+  if (!res.ok) {
+    const err = new Error(`auto-link-all: ${res.status}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('auto-link-all: empty body');
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        onEvent(JSON.parse(t) as Record<string, unknown>);
+      } catch {
+        console.warn('[auto-link-all] skip bad JSON line');
+      }
+    }
+  }
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      onEvent(JSON.parse(tail) as Record<string, unknown>);
+    } catch {
+      console.warn('[auto-link-all] skip bad JSON tail');
+    }
+  }
 }
 
 export async function createAdminPrompt(prompt_text: string, difficulty: string): Promise<Record<string, unknown>> {
