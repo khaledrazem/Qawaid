@@ -16,10 +16,15 @@ import type { AnalyzeWord } from '@/services/backendApi';
 import { getWordSpanAt } from '@/lib/promptWords';
 import type { Prompt, PromptDefinition, Definition } from '@/types/db';
 import type { Difficulty } from '@/types/db';
+import AdminPagination from './AdminPagination';
+
+const PROMPTS_PAGE_SIZE = 50;
 
 export default function AdminPrompts() {
   const [list, setList] = useState<(Prompt & { definitions?: PromptDefinition[] })[]>([]);
   const [definitions, setDefinitions] = useState<Definition[]>([]);
+  const [listOffset, setListOffset] = useState(0);
+  const [listTotal, setListTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [newText, setNewText] = useState('');
@@ -48,41 +53,60 @@ export default function AdminPrompts() {
   const [bulkReplace, setBulkReplace] = useState(false);
   const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null);
 
-  const load = async () => {
-    try {
-      const { prompts, prompt_definitions, definitions: defs } = await getAdminPrompts();
-      const byPrompt = (prompt_definitions ?? []).reduce<Record<string, PromptDefinition[]>>((acc, pd) => {
-        const pid = (pd as { prompt_id: string }).prompt_id;
-        if (!acc[pid]) acc[pid] = [];
-        acc[pid].push(pd as unknown as PromptDefinition);
-        return acc;
-      }, {});
-      setList((prompts ?? []).map((p) => ({ ...p, definitions: byPrompt[(p as { id: string }).id] ?? [] } as Prompt & { definitions?: PromptDefinition[] })));
-      setDefinitions((defs ?? []) as unknown as Definition[]);
-    } finally {
-      setLoading(false);
-    }
+  const applyPromptsResponse = (res: Awaited<ReturnType<typeof getAdminPrompts>>) => {
+    const { prompts, prompt_definitions, definitions: defs } = res;
+    setListTotal(res.total ?? 0);
+    const byPrompt = (prompt_definitions ?? []).reduce<Record<string, PromptDefinition[]>>((acc, pd) => {
+      const pid = (pd as { prompt_id: string }).prompt_id;
+      if (!acc[pid]) acc[pid] = [];
+      acc[pid].push(pd as unknown as PromptDefinition);
+      return acc;
+    }, {});
+    setList((prompts ?? []).map((p) => ({ ...p, definitions: byPrompt[(p as { id: string }).id] ?? [] } as Prompt & { definitions?: PromptDefinition[] })));
+    setDefinitions((defs ?? []) as unknown as Definition[]);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    getAdminPrompts({ limit: PROMPTS_PAGE_SIZE, offset: listOffset })
+      .then((res) => {
+        if (!alive) return;
+        applyPromptsResponse(res);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [listOffset]);
+
+  const reload = () => {
+    setLoading(true);
+    getAdminPrompts({ limit: PROMPTS_PAGE_SIZE, offset: listOffset })
+      .then(applyPromptsResponse)
+      .finally(() => setLoading(false));
+  };
 
   const addPrompt = async () => {
     if (!newText.trim()) return;
     await createAdminPrompt(newText.trim(), newDifficulty);
     setAddOpen(false);
     setNewText('');
-    load();
+    if (listOffset !== 0) setListOffset(0);
+    else reload();
   };
 
   const toggleActive = async (row: Prompt) => {
     await patchAdminPrompt(row.id, { is_active: !row.is_active });
-    load();
+    reload();
   };
 
   const remove = async (id: string) => {
     if (!confirm('Delete this prompt and its definition links?')) return;
     await deleteAdminPrompt(id);
-    load();
+    reload();
   };
 
   const openLinkDef = async (promptId: string, promptText: string) => {
@@ -113,7 +137,7 @@ export default function AdminPrompts() {
     setLinkDefError(null);
     try {
       const res = await postAutoLink(linkDefOpen, autoLinkReplace);
-      await load();
+      await reload();
       const n = res.created?.length ?? 0;
       setAutoLinkResult(n > 0 ? `Created ${n} link(s). Review below and remove or add as needed.` : 'No new links added (merge kept existing).');
     } catch (e) {
@@ -171,7 +195,7 @@ export default function AdminPrompts() {
           }
         },
       );
-      await load();
+      await reload();
     } catch (e) {
       setBulkAutoLinkResult(e instanceof Error ? e.message : 'Bulk auto-link failed');
     } finally {
@@ -184,7 +208,7 @@ export default function AdminPrompts() {
     setAutoAddMessage(null);
     try {
       const res = await postAutoLink(promptId, false);
-      await load();
+      await reload();
       const n = res.created?.length ?? 0;
       setAutoAddMessage(n > 0 ? `Added ${n} link(s) to this prompt.` : 'No new links (merge kept existing).');
       setTimeout(() => setAutoAddMessage(null), 4000);
@@ -199,7 +223,7 @@ export default function AdminPrompts() {
   const removeAllPromptDefs = async () => {
     if (!linkDefOpen || !confirm('Remove all definition links from this prompt? You can re-run Auto-detect or add manually.')) return;
     await deleteAdminPromptDefinitions(linkDefOpen);
-    await load();
+    await reload();
     setAutoLinkResult('All links removed.');
   };
 
@@ -212,7 +236,7 @@ export default function AdminPrompts() {
         is_letter: false,
       });
       setLinkDefOpen(null);
-      load();
+      reload();
     } catch (e) {
       setLinkDefError(e instanceof Error ? e.message : 'Save failed');
     }
@@ -252,13 +276,13 @@ export default function AdminPrompts() {
       definition_id: editImageDefId || undefined,
     });
     setEditImageOpen(null);
-    load();
+    reload();
   };
 
   const removePromptDef = async (promptDefId: string) => {
     if (!confirm('Remove this definition link from the prompt?')) return;
     await deleteAdminPromptDefinition(promptDefId);
-    load();
+    reload();
   };
 
   const currentPromptLinks = linkDefOpen ? list.find((r) => r.id === linkDefOpen)?.definitions ?? [] : [];

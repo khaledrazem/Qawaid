@@ -72,6 +72,23 @@
   padding: var(--space-6);
 }
 
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-pagination__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 /* --- Login --- */
 .admin-login {
   max-width: 360px;

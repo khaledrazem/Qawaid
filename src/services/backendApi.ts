@@ -228,12 +228,26 @@ export async function postAutoLink(
 
 // --- Admin (JWT + is_admin) ---
 
-export async function getAdminPrompts(): Promise<{
+export type AdminListParams = { limit?: number; offset?: number };
+
+function adminListQuery(params?: AdminListParams): string {
+  if (!params) return '';
+  const q = new URLSearchParams();
+  if (params.limit != null) q.set('limit', String(params.limit));
+  if (params.offset != null) q.set('offset', String(params.offset));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function getAdminPrompts(params?: AdminListParams): Promise<{
   prompts: Record<string, unknown>[];
   prompt_definitions: Record<string, unknown>[];
   definitions: Record<string, unknown>[];
+  total: number;
+  limit: number;
+  offset: number;
 }> {
-  return backendRequestWithAuth('/api/admin/prompts', { method: 'GET' });
+  return backendRequestWithAuth(`/api/admin/prompts${adminListQuery(params)}`, { method: 'GET' });
 }
 
 /** No prompts, or legacy stream:false JSON response. */
@@ -341,12 +355,15 @@ export async function deleteAdminPromptDefinition(promptDefinitionId: string): P
   return backendRequestWithAuth(`/api/admin/prompt-definitions/${promptDefinitionId}`, { method: 'DELETE' });
 }
 
-export async function getAdminDefinitions(): Promise<{
+export async function getAdminDefinitions(params?: AdminListParams): Promise<{
   definitions: Record<string, unknown>[];
   categories: Record<string, unknown>[];
   category_definitions: { category_id: string; definition_id: string }[];
+  total: number;
+  limit: number;
+  offset: number;
 }> {
-  return backendRequestWithAuth('/api/admin/definitions', { method: 'GET' });
+  return backendRequestWithAuth(`/api/admin/definitions${adminListQuery(params)}`, { method: 'GET' });
 }
 
 export async function createAdminDefinition(label: string, category_ids: string[]): Promise<Record<string, unknown>> {
@@ -370,12 +387,15 @@ export async function deleteAdminDefinition(definitionId: string): Promise<{ ok:
   return backendRequestWithAuth(`/api/admin/definitions/${definitionId}`, { method: 'DELETE' });
 }
 
-export async function getAdminCategories(): Promise<{
+export async function getAdminCategories(params?: AdminListParams): Promise<{
   categories: Record<string, unknown>[];
   definitions: Record<string, unknown>[];
   category_definitions: { category_id: string; definition_id: string }[];
+  total: number;
+  limit: number;
+  offset: number;
 }> {
-  return backendRequestWithAuth('/api/admin/categories', { method: 'GET' });
+  return backendRequestWithAuth(`/api/admin/categories${adminListQuery(params)}`, { method: 'GET' });
 }
 
 export async function createAdminCategory(name: string, definition_ids: string[]): Promise<Record<string, unknown>> {
@@ -399,11 +419,14 @@ export async function deleteAdminCategory(categoryId: string): Promise<{ ok: boo
   return backendRequestWithAuth(`/api/admin/categories/${categoryId}`, { method: 'DELETE' });
 }
 
-export async function getAdminQuestions(): Promise<{
+export async function getAdminQuestions(params?: AdminListParams): Promise<{
   questions: Record<string, unknown>[];
   categories: Record<string, unknown>[];
+  total: number;
+  limit: number;
+  offset: number;
 }> {
-  return backendRequestWithAuth('/api/admin/questions', { method: 'GET' });
+  return backendRequestWithAuth(`/api/admin/questions${adminListQuery(params)}`, { method: 'GET' });
 }
 
 export async function createAdminQuestion(body: {
@@ -445,8 +468,11 @@ export async function getAdminStatistics(): Promise<{
   return backendRequestWithAuth('/api/admin/statistics', { method: 'GET' });
 }
 
-export async function getAdminReports(): Promise<{
+export async function getAdminReports(params?: AdminListParams): Promise<{
   reports: (Record<string, unknown> & { prompt_text?: string; definition_label?: string })[];
+  total: number;
+  limit: number;
+  offset: number;
 }> {
-  return backendRequestWithAuth('/api/admin/reports', { method: 'GET' });
+  return backendRequestWithAuth(`/api/admin/reports${adminListQuery(params)}`, { method: 'GET' });
 }

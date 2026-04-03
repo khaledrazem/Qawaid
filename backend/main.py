@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException, Path as ApiPath, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Path as ApiPath, Query, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -1054,17 +1054,53 @@ class AdminQuestionPatch(BaseModel):
     is_active: Optional[bool] = None
 
 
+def _admin_page_bounds(limit: int, offset: int) -> Tuple[int, int, int]:
+    """Clamp limit/offset; return (limit, offset, end_inclusive) for PostgREST .range()."""
+    lim = max(1, min(int(limit), 200))
+    off = max(0, int(offset))
+    end = off + lim - 1
+    return lim, off, end
+
+
+def _table_count_exact(sb: Any, table: str) -> int:
+    r = sb.table(table).select("id", count="exact").execute()
+    c = getattr(r, "count", None)
+    if c is not None:
+        return int(c)
+    return len(r.data or [])
+
+
 @app.get("/api/admin/prompts")
-def admin_get_prompts(user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+def admin_get_prompts(
+    user: UserContext = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
     _require_admin(user)
     sb = _get_sb()
-    prompts = sb.table("prompts").select("*").order("created_at", desc=True).execute()
-    pd = sb.table("prompt_definitions").select("*").execute()
+    lim, off, end = _admin_page_bounds(limit, offset)
+    total = _table_count_exact(sb, "prompts")
+    prompts = (
+        sb.table("prompts")
+        .select("*")
+        .order("created_at", desc=True)
+        .range(off, end)
+        .execute()
+    )
+    p_data = prompts.data or []
+    page_ids = [p["id"] for p in p_data]
+    if page_ids:
+        pd = sb.table("prompt_definitions").select("*").in_("prompt_id", page_ids).execute()
+    else:
+        pd = type("_E", (), {"data": []})()
     definitions = sb.table("definitions").select("*").order("label").execute()
     return {
-        "prompts": prompts.data or [],
+        "prompts": p_data,
         "prompt_definitions": pd.data or [],
         "definitions": definitions.data or [],
+        "total": total,
+        "limit": lim,
+        "offset": off,
     }
 
 
@@ -1204,16 +1240,30 @@ def admin_delete_prompt_definition(pd_id: str, user: UserContext = Depends(get_c
 
 
 @app.get("/api/admin/definitions")
-def admin_get_definitions(user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+def admin_get_definitions(
+    user: UserContext = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
     _require_admin(user)
     sb = _get_sb()
-    definitions = sb.table("definitions").select("*").order("label").execute()
+    lim, off, end = _admin_page_bounds(limit, offset)
+    total = _table_count_exact(sb, "definitions")
+    definitions = sb.table("definitions").select("*").order("label").range(off, end).execute()
+    d_data = definitions.data or []
+    def_ids = [d["id"] for d in d_data]
     categories = sb.table("categories").select("*").order("name").execute()
-    cd = sb.table("category_definitions").select("category_id, definition_id").execute()
+    if def_ids:
+        cd = sb.table("category_definitions").select("category_id, definition_id").in_("definition_id", def_ids).execute()
+    else:
+        cd = type("_E", (), {"data": []})()
     return {
-        "definitions": definitions.data or [],
+        "definitions": d_data,
         "categories": categories.data or [],
         "category_definitions": cd.data or [],
+        "total": total,
+        "limit": lim,
+        "offset": off,
     }
 
 
@@ -1265,16 +1315,30 @@ def admin_delete_definition(definition_id: str, user: UserContext = Depends(get_
 
 
 @app.get("/api/admin/categories")
-def admin_get_categories(user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+def admin_get_categories(
+    user: UserContext = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
     _require_admin(user)
     sb = _get_sb()
-    categories = sb.table("categories").select("*").order("name").execute()
+    lim, off, end = _admin_page_bounds(limit, offset)
+    total = _table_count_exact(sb, "categories")
+    categories = sb.table("categories").select("*").order("name").range(off, end).execute()
+    c_data = categories.data or []
+    cat_ids = [c["id"] for c in c_data]
     definitions = sb.table("definitions").select("*").order("label").execute()
-    cd = sb.table("category_definitions").select("category_id, definition_id").execute()
+    if cat_ids:
+        cd = sb.table("category_definitions").select("category_id, definition_id").in_("category_id", cat_ids).execute()
+    else:
+        cd = type("_E", (), {"data": []})()
     return {
-        "categories": categories.data or [],
+        "categories": c_data,
         "definitions": definitions.data or [],
         "category_definitions": cd.data or [],
+        "total": total,
+        "limit": lim,
+        "offset": off,
     }
 
 
@@ -1323,12 +1387,24 @@ def admin_delete_category(category_id: str, user: UserContext = Depends(get_curr
 
 
 @app.get("/api/admin/questions")
-def admin_get_questions(user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+def admin_get_questions(
+    user: UserContext = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
     _require_admin(user)
     sb = _get_sb()
-    questions = sb.table("questions").select("*").order("question_text").execute()
+    lim, off, end = _admin_page_bounds(limit, offset)
+    total = _table_count_exact(sb, "questions")
+    questions = sb.table("questions").select("*").order("question_text").range(off, end).execute()
     categories = sb.table("categories").select("*").order("name").execute()
-    return {"questions": questions.data or [], "categories": categories.data or []}
+    return {
+        "questions": questions.data or [],
+        "categories": categories.data or [],
+        "total": total,
+        "limit": lim,
+        "offset": off,
+    }
 
 
 @app.post("/api/admin/questions")
@@ -1426,13 +1502,25 @@ def admin_get_statistics(user: UserContext = Depends(get_current_user)) -> Dict[
 
 
 @app.get("/api/admin/reports")
-def admin_get_reports(user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+def admin_get_reports(
+    user: UserContext = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
     _require_admin(user)
     sb = _get_sb()
-    reports = sb.table("question_reports").select("*").order("created_at", desc=True).execute()
+    lim, off, end = _admin_page_bounds(limit, offset)
+    total = _table_count_exact(sb, "question_reports")
+    reports = (
+        sb.table("question_reports")
+        .select("*")
+        .order("created_at", desc=True)
+        .range(off, end)
+        .execute()
+    )
     rows = reports.data or []
     if not rows:
-        return {"reports": []}
+        return {"reports": [], "total": total, "limit": lim, "offset": off}
     prompt_ids = list({r["prompt_id"] for r in rows})
     def_ids = list({r["definition_id"] for r in rows if r.get("definition_id")})
     by_prompt: Dict[str, str] = {}
@@ -1450,7 +1538,7 @@ def admin_get_reports(user: UserContext = Depends(get_current_user)) -> Dict[str
             "prompt_text": by_prompt.get(r["prompt_id"]),
             "definition_label": by_def.get(r["definition_id"]) if r.get("definition_id") else None,
         })
-    return {"reports": out}
+    return {"reports": out, "total": total, "limit": lim, "offset": off}
 
 
 @app.get("/health")
