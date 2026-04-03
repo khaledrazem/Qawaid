@@ -46,6 +46,8 @@ export const BATCH = {
 /** Offline mode (v1-4): pre-generate up to this many questions at app start. */
 export const OFFLINE = {
   cacheSize: envInt('VITE_OFFLINE_CACHE_SIZE', 100),
+  /** When online, refetch if cache is older than this (ms). Default: 24 hours. */
+  cacheMaxAgeMs: envInt('VITE_OFFLINE_CACHE_MAX_AGE_MS', 24 * 60 * 60 * 1000),
 } as const;
 
 /** Session rules. */

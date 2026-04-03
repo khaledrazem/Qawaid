@@ -4,6 +4,7 @@ import {
   postAnalyze,
   postPromptDefinition,
   postAutoLink,
+  postAdminAutoLinkAll,
   getAdminPrompts,
   createAdminPrompt,
   patchAdminPrompt,
@@ -41,6 +42,10 @@ export default function AdminPrompts() {
   const [autoLinkResult, setAutoLinkResult] = useState<string | null>(null);
   const [autoAddId, setAutoAddId] = useState<string | null>(null);
   const [autoAddMessage, setAutoAddMessage] = useState<string | null>(null);
+  const [bulkAutoLinking, setBulkAutoLinking] = useState(false);
+  const [bulkAutoLinkResult, setBulkAutoLinkResult] = useState<string | null>(null);
+  const [bulkOnlyActive, setBulkOnlyActive] = useState(false);
+  const [bulkReplace, setBulkReplace] = useState(false);
   const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null);
 
   const load = async () => {
@@ -115,6 +120,34 @@ export default function AdminPrompts() {
       setLinkDefError(e instanceof Error ? e.message : 'Auto-detect failed');
     } finally {
       setAutoLinking(false);
+    }
+  };
+
+  const runAutoLinkAllPrompts = async () => {
+    const msg =
+      'Run auto-detect (CAMeL) on all prompts? New links are merged: existing span+definition pairs are kept. Duplicates are skipped.\n\n' +
+      (bulkReplace
+        ? 'Replace mode is ON: existing links on each prompt will be removed before re-adding.'
+        : 'Replace mode is OFF: only new links are added.');
+    if (!confirm(msg)) return;
+    setBulkAutoLinking(true);
+    setBulkAutoLinkResult(null);
+    try {
+      const res = await postAdminAutoLinkAll({
+        replace: bulkReplace,
+        only_active: bulkOnlyActive,
+      });
+      await load();
+      let text = `Done: ${res.links_created} new link(s) across ${res.prompts_processed} prompt(s).`;
+      if (res.errors?.length) {
+        text += ` ${res.errors.length} prompt(s) failed (see console).`;
+        console.warn('auto-link-all errors', res.errors);
+      }
+      setBulkAutoLinkResult(text);
+    } catch (e) {
+      setBulkAutoLinkResult(e instanceof Error ? e.message : 'Bulk auto-link failed');
+    } finally {
+      setBulkAutoLinking(false);
     }
   };
 
@@ -220,7 +253,38 @@ export default function AdminPrompts() {
 
       {ready && (
         <>
-          <button type="button" onClick={() => setAddOpen(true)} className="btn-add">Add prompt</button>
+          <div className="admin-prompts-toolbar" style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+            <button type="button" onClick={() => setAddOpen(true)} className="btn-add">Add prompt</button>
+            <span className="text-muted">|</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={bulkOnlyActive}
+                onChange={(e) => setBulkOnlyActive(e.target.checked)}
+              />
+              Only active prompts
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={bulkReplace}
+                onChange={(e) => setBulkReplace(e.target.checked)}
+              />
+              Replace links per prompt (clear then re-detect)
+            </label>
+            <button
+              type="button"
+              onClick={runAutoLinkAllPrompts}
+              disabled={bulkAutoLinking}
+              className="btn-add"
+              title="Add CAMeL-detected definition links for every prompt; merges with existing unless Replace is checked"
+            >
+              {bulkAutoLinking ? 'Auto-linking all…' : 'Auto-link all prompts'}
+            </button>
+          </div>
+          {bulkAutoLinkResult && (
+            <p className="text-muted" style={{ marginBottom: 12 }}>{bulkAutoLinkResult}</p>
+          )}
 
           {addOpen && (
             <div className="card">

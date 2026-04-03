@@ -236,6 +236,23 @@ export async function getAdminPrompts(): Promise<{
   return backendRequestWithAuth('/api/admin/prompts', { method: 'GET' });
 }
 
+export interface AdminAutoLinkAllResult {
+  prompts_processed: number;
+  links_created: number;
+  errors: { prompt_id: string; detail: string }[];
+}
+
+/** Run CAMeL auto-detect on all prompts (merge: skips duplicate span + definition). Admin only. */
+export async function postAdminAutoLinkAll(body?: {
+  replace?: boolean;
+  only_active?: boolean;
+}): Promise<AdminAutoLinkAllResult> {
+  return backendRequestWithAuth<AdminAutoLinkAllResult>('/api/admin/prompts/auto-link-all', {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
 export async function createAdminPrompt(prompt_text: string, difficulty: string): Promise<Record<string, unknown>> {
   return backendRequestWithAuth('/api/admin/prompts', {
     method: 'POST',

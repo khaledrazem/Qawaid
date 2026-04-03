@@ -45,6 +45,20 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def _validate_supabase_env() -> None:
+    """Fail fast if DB client cannot be configured (avoids obscure errors on first /api call)."""
+    if not (SUPABASE_URL or "").strip():
+        raise RuntimeError(
+            "SUPABASE_URL is not set. On Cloud Run, add env var SUPABASE_URL=https://<ref>.supabase.co "
+            "(the server does not read VITE_SUPABASE_URL)."
+        )
+    if not (SUPABASE_SERVICE_ROLE_KEY or "").strip():
+        raise RuntimeError(
+            "SUPABASE_SERVICE_ROLE_KEY is not set. Add it in Cloud Run (Secret Manager recommended)."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Request/response models
 # ---------------------------------------------------------------------------
@@ -78,6 +92,12 @@ class AddDefinitionLinkRequest(BaseModel):
 
 class AutoLinkRequest(BaseModel):
     replace: bool = False  # if True, delete all existing links then add; else merge (add only new)
+
+
+class AdminAutoLinkAllRequest(BaseModel):
+    """Bulk auto-link: same merge rules as single prompt (skip duplicate span + definition)."""
+    replace: bool = False
+    only_active: bool = False  # if True, skip prompts where is_active is false
 
 
 class UserContext(BaseModel):
@@ -699,6 +719,61 @@ def _get_prompt_text(prompt_id: str) -> Optional[str]:
     return r.data[0].get("prompt_text")
 
 
+def _run_auto_link(
+    sb: Any,
+    prompt_id: str,
+    prompt_text: str,
+    replace: bool,
+    definitions: List[Dict[str, Any]],
+    *,
+    quiet: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Insert prompt_definitions from CAMeL auto_detect_all.
+    When replace is False, skips rows that already exist (same definition_id + index_start + index_end).
+    """
+    if not (prompt_text or "").strip():
+        return []
+
+    if replace:
+        sb.table("prompt_definitions").delete().eq("prompt_id", prompt_id).execute()
+
+    existing = set()
+    if not replace:
+        r = sb.table("prompt_definitions").select("definition_id, index_start, index_end").eq("prompt_id", prompt_id).execute()
+        for row in r.data or []:
+            key = (row["definition_id"], row["index_start"], row.get("index_end"))
+            existing.add(key)
+
+    suggestions = auto_detect_all(prompt_text, definitions, quiet=quiet)
+    created: List[Dict[str, Any]] = []
+    for s in suggestions:
+        key = (s["definitionId"], s["start"], s["end"])
+        if key in existing:
+            continue
+        is_letter = s.get("is_letter", False)
+        row = {
+            "prompt_id": prompt_id,
+            "definition_id": s["definitionId"],
+            "index_start": int(s["start"]),
+            "index_end": int(s["end"]),
+            "is_letter": is_letter,
+        }
+        ins = sb.table("prompt_definitions").insert(row).execute()
+        if ins.data and len(ins.data) > 0:
+            created.append({
+                "id": ins.data[0]["id"],
+                "prompt_id": prompt_id,
+                "definition_id": s["definitionId"],
+                "index_start": row["index_start"],
+                "index_end": row["index_end"],
+                "is_letter": is_letter,
+            })
+            existing.add(key)
+
+    return created
+
+
 @app.post("/api/prompts/{prompt_id}/definitions")
 def post_prompt_definitions(
     prompt_id: str = Path(..., description="Prompt UUID"),
@@ -751,44 +826,8 @@ def post_prompt_auto_link(
             raise HTTPException(status_code=404, detail="Prompt not found")
         sb = _get_sb()
         replace = body.replace if body else False
-
-        if replace:
-            sb.table("prompt_definitions").delete().eq("prompt_id", prompt_id).execute()
-
-        existing = set()
-        if not replace:
-            r = sb.table("prompt_definitions").select("definition_id, index_start, index_end").eq("prompt_id", prompt_id).execute()
-            for row in r.data or []:
-                key = (row["definition_id"], row["index_start"], row.get("index_end"))
-                existing.add(key)
-
         definitions = _get_all_definitions_with_categories()
-        suggestions = auto_detect_all(prompt_text, definitions)
-        created = []
-        for s in suggestions:
-            key = (s["definitionId"], s["start"], s["end"])
-            if key in existing:
-                continue
-            is_letter = s.get("is_letter", False)
-            row = {
-                "prompt_id": prompt_id,
-                "definition_id": s["definitionId"],
-                "index_start": int(s["start"]),
-                "index_end": int(s["end"]),
-                "is_letter": is_letter,
-            }
-            ins = sb.table("prompt_definitions").insert(row).execute()
-            if ins.data and len(ins.data) > 0:
-                created.append({
-                    "id": ins.data[0]["id"],
-                    "prompt_id": prompt_id,
-                    "definition_id": s["definitionId"],
-                    "index_start": row["index_start"],
-                    "index_end": row["index_end"],
-                    "is_letter": is_letter,
-                })
-                existing.add(key)
-
+        created = _run_auto_link(sb, prompt_id, prompt_text, replace, definitions, quiet=False)
         return {"created": created}
     except HTTPException:
         raise
@@ -860,6 +899,49 @@ def admin_get_prompts(user: UserContext = Depends(get_current_user)) -> Dict[str
         "prompts": prompts.data or [],
         "prompt_definitions": pd.data or [],
         "definitions": definitions.data or [],
+    }
+
+
+@app.post("/api/admin/prompts/auto-link-all")
+def admin_auto_link_all(
+    body: AdminAutoLinkAllRequest = AdminAutoLinkAllRequest(),
+    user: UserContext = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Run CAMeL auto-detect on every prompt (optional: only_active). Reuses merge semantics:
+    existing links are kept; only new (definition_id, span) pairs are inserted.
+    """
+    _require_admin(user)
+    sb = _get_sb()
+    replace = body.replace
+    only_active = body.only_active
+
+    pr = sb.table("prompts").select("id, prompt_text, is_active").execute()
+    rows = pr.data or []
+    if only_active:
+        rows = [r for r in rows if r.get("is_active")]
+
+    definitions = _get_all_definitions_with_categories()
+    total_created = 0
+    prompts_processed = 0
+    errors: List[Dict[str, str]] = []
+
+    for row in rows:
+        pid = row.get("id")
+        ptext = row.get("prompt_text") or ""
+        if not pid or not (ptext or "").strip():
+            continue
+        try:
+            created = _run_auto_link(sb, str(pid), str(ptext), replace, definitions, quiet=True)
+            total_created += len(created)
+            prompts_processed += 1
+        except Exception as e:
+            errors.append({"prompt_id": str(pid), "detail": f"{type(e).__name__}: {e}"})
+
+    return {
+        "prompts_processed": prompts_processed,
+        "links_created": total_created,
+        "errors": errors,
     }
 
 

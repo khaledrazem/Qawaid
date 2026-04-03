@@ -16,34 +16,70 @@ import type { QuestionDTO } from '@/types/dto';
 const LOG_PREFIX = '[BatchLoader]';
 const STORAGE_KEY = 'sahra_question_batch';
 
+/** Wrapped payload with timestamp so we can expire cache when back online. */
+interface StoredBatchPayload {
+  updatedAt: number;
+  questions: QuestionDTO[];
+}
+
+function isNavigatorOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine;
+}
+
+function isCacheExpired(updatedAt: number): boolean {
+  if (updatedAt <= 0) return true;
+  return Date.now() - updatedAt > OFFLINE.cacheMaxAgeMs;
+}
+
 /* -----------------------------------------------------------------------
    localStorage helpers
    ----------------------------------------------------------------------- */
 
 function saveToStorage(questions: QuestionDTO[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(questions));
+    const payload: StoredBatchPayload = { updatedAt: Date.now(), questions };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     console.warn(LOG_PREFIX, 'Failed to save batch to localStorage');
   }
 }
 
-function loadFromStorage(): QuestionDTO[] | null {
+function validateQuestions(arr: QuestionDTO[]): QuestionDTO[] | null {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  if (!arr[0].categoryId || !arr[0].questionType) {
+    console.warn(LOG_PREFIX, 'Stale cache detected, discarding');
+    clearStorage();
+    return null;
+  }
+  return arr;
+}
+
+/** Raw load including age; legacy format = plain array (treated as expired when online). */
+function loadBatchPayload(): StoredBatchPayload | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as QuestionDTO[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    // Validate first item has required fields (catches stale cache from older DTO)
-    if (!parsed[0].categoryId || !parsed[0].questionType) {
-      console.warn(LOG_PREFIX, 'Stale cache detected, discarding');
-      clearStorage();
-      return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      const questions = validateQuestions(parsed as QuestionDTO[]);
+      if (!questions) return null;
+      return { updatedAt: 0, questions };
     }
-    return parsed;
+    const obj = parsed as Partial<StoredBatchPayload>;
+    if (!obj || !Array.isArray(obj.questions)) return null;
+    const questions = validateQuestions(obj.questions as QuestionDTO[]);
+    if (!questions) return null;
+    const updatedAt =
+      typeof obj.updatedAt === 'number' && Number.isFinite(obj.updatedAt) ? obj.updatedAt : 0;
+    return { updatedAt, questions };
   } catch {
     return null;
   }
+}
+
+function loadFromStorage(): QuestionDTO[] | null {
+  const p = loadBatchPayload();
+  return p?.questions ?? null;
 }
 
 function clearStorage(): void {
@@ -55,13 +91,19 @@ function clearStorage(): void {
  * Uses backend batch API when online; no-op when offline or cache already full.
  */
 export function prewarmQuestionCache(): void {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+  if (!isNavigatorOnline()) return;
 
-  const cached = loadFromStorage();
-  if (cached && cached.length >= OFFLINE.cacheSize) return;
+  const payload = loadBatchPayload();
+  const cached = payload?.questions ?? null;
+  const expired = !payload || isCacheExpired(payload.updatedAt);
+  if (!expired && cached && cached.length >= OFFLINE.cacheSize) return;
 
   (async () => {
-    let total = cached?.length ?? 0;
+    if (expired && cached?.length) {
+      clearStorage();
+      console.log(LOG_PREFIX, 'Cache expired — prewarming fresh questions');
+    }
+    let total = expired ? 0 : cached?.length ?? 0;
     if (total >= OFFLINE.cacheSize) return;
     try {
       const used = new Set<string>();
@@ -75,7 +117,7 @@ export function prewarmQuestionCache(): void {
         for (const q of res.questions) {
           if (q.promptId) used.add(q.promptId);
         }
-        const current = loadFromStorage() ?? [];
+        const current = loadBatchPayload()?.questions ?? [];
         const combined = [...current, ...res.questions].slice(0, OFFLINE.cacheSize);
         saveToStorage(combined);
         total = combined.length;
@@ -113,7 +155,7 @@ export class BatchLoader {
     this.userWeights = userWeights;
     console.log(LOG_PREFIX, 'Initializing...');
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (!isNavigatorOnline()) {
       const cached = loadFromStorage();
       if (cached && cached.length > 0) {
         this.queue = cached;
@@ -156,8 +198,19 @@ export class BatchLoader {
       return;
     }
 
-    const cached = loadFromStorage();
-    if (cached && cached.length > 0) {
+    const batchPayload = loadBatchPayload();
+    const cached = batchPayload?.questions ?? null;
+    const cacheStale =
+      isNavigatorOnline() &&
+      batchPayload != null &&
+      cached != null &&
+      cached.length > 0 &&
+      isCacheExpired(batchPayload.updatedAt);
+
+    if (cacheStale) {
+      clearStorage();
+      console.log(LOG_PREFIX, 'Cache older than max age — fetching fresh batch');
+    } else if (cached && cached.length > 0) {
       console.log(LOG_PREFIX, `Loaded ${cached.length} questions from cache`);
       this.queue = cached;
       for (const q of cached) {
@@ -202,7 +255,7 @@ export class BatchLoader {
     }
 
     if (this.queue.length === 0) {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (!isNavigatorOnline()) {
         console.warn(LOG_PREFIX, 'Queue exhausted and offline — no more questions');
         return null;
       }
@@ -261,7 +314,7 @@ export class BatchLoader {
 
   private triggerPreload(): void {
     if (this.preloading) return;
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (!isNavigatorOnline()) return;
 
     this.preloading = true;
     const used = [...this.usedPromptIds];

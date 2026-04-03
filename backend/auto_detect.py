@@ -62,6 +62,8 @@ def _build_definitions_by_category(definitions: List[Dict[str, Any]]) -> Dict[st
 def auto_detect_all(
     prompt_text: str,
     definitions: List[Dict[str, Any]],
+    *,
+    quiet: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     For each word in the prompt, find definitions via CAMeL morphology only.
@@ -87,8 +89,9 @@ def auto_detect_all(
             while len(word_analyses) < len(words):
                 word_analyses.append([])
         except Exception as e:
-            print(f"[auto_detect] analyze_sentence failed: {e}")
-            traceback.print_exc()
+            if not quiet:
+                print(f"[auto_detect] analyze_sentence failed: {e}")
+                traceback.print_exc()
             use_disambig = False
     if not use_disambig:
         for w in words:
@@ -98,19 +101,21 @@ def auto_detect_all(
                 try:
                     analyses = analyze_word(word_str) or []
                 except Exception as e:
-                    print(f"[auto_detect] Error analyzing word {word_str!r}: {e}")
-                    traceback.print_exc()
+                    if not quiet:
+                        print(f"[auto_detect] Error analyzing word {word_str!r}: {e}")
+                        traceback.print_exc()
             word_analyses.append(analyses)
 
-    print("[auto_detect] CAMeL morphology:", get_morphology_status())
-    print("[auto_detect] Sentence disambiguation:", "on" if use_disambig else "off")
-    print("[auto_detect] prompt words:", [w.get("word") for w in words])
-    for i, (w, analyses) in enumerate(zip(words, word_analyses)):
-        word_str = (w.get("word") or "").strip()
-        if word_str:
-            print(f"[auto_detect] word[{i}] {word_str!r} -> CAMeL analyses (before mapping): {analyses}")
-    if use_morph and get_morphology_status() == "available" and word_analyses and all(not a for a in word_analyses):
-        print("[auto_detect] All words had no analyses. Install morphology data: camel_data -i morphology-db-msa-r13")
+    if not quiet:
+        print("[auto_detect] CAMeL morphology:", get_morphology_status())
+        print("[auto_detect] Sentence disambiguation:", "on" if use_disambig else "off")
+        print("[auto_detect] prompt words:", [w.get("word") for w in words])
+        for i, (w, analyses) in enumerate(zip(words, word_analyses)):
+            word_str = (w.get("word") or "").strip()
+            if word_str:
+                print(f"[auto_detect] word[{i}] {word_str!r} -> CAMeL analyses (before mapping): {analyses}")
+        if use_morph and get_morphology_status() == "available" and word_analyses and all(not a for a in word_analyses):
+            print("[auto_detect] All words had no analyses. Install morphology data: camel_data -i morphology-db-msa-r13")
 
     for i, w in enumerate(words):
         word_str = (w.get("word") or "").strip()
@@ -140,11 +145,14 @@ def auto_detect_all(
                                 "is_letter": False,
                             })
                 else:
-                    print(f"[auto_detect] Unmapped CAMeL word[{i}] {word_str!r}: {analysis}")
+                    if not quiet:
+                        print(f"[auto_detect] Unmapped CAMeL word[{i}] {word_str!r}: {analysis}")
             except Exception as e:
-                print(f"[auto_detect] Error in definitions_matching_camel_analysis: {e}")
-                traceback.print_exc()
-                print(f"[auto_detect] Unmapped (error) word[{i}] {word_str!r}: {analysis}")
+                if not quiet:
+                    print(f"[auto_detect] Error in definitions_matching_camel_analysis: {e}")
+                    traceback.print_exc()
+                    print(f"[auto_detect] Unmapped (error) word[{i}] {word_str!r}: {analysis}")
 
-    print(f"[auto_detect] Suggestions: {len(suggestions)} from CAMeL mapping (unmapped printed above)")
+    if not quiet:
+        print(f"[auto_detect] Suggestions: {len(suggestions)} from CAMeL mapping (unmapped printed above)")
     return suggestions
