@@ -236,13 +236,22 @@ export async function getAdminPrompts(): Promise<{
   return backendRequestWithAuth('/api/admin/prompts', { method: 'GET' });
 }
 
-export interface AdminAutoLinkAllResult {
-  prompts_processed: number;
-  links_created: number;
-  errors: { prompt_id: string; detail: string }[];
-}
+/** Immediate response: job runs in background on the server (batched). */
+export type AdminAutoLinkAllResult =
+  | {
+      status: 'accepted';
+      message: string;
+      prompt_count: number;
+      batch_size: number;
+    }
+  | {
+      status: 'noop';
+      message: string;
+      prompt_count: number;
+      batch_size: number;
+    };
 
-/** Run CAMeL auto-detect on all prompts (merge: skips duplicate span + definition). Admin only. */
+/** Queue CAMeL auto-detect for all prompts. Returns 202 + accepted (or noop). Admin only. */
 export async function postAdminAutoLinkAll(body?: {
   replace?: boolean;
   only_active?: boolean;

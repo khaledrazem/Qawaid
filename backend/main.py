@@ -4,12 +4,14 @@ Qawaid backend API: playable, batch, analyze, suggest-links, seed.
 
 import json
 import os
+import threading
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException, Path
+from fastapi import Depends, FastAPI, Header, HTTPException, Path as ApiPath, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
@@ -774,9 +776,64 @@ def _run_auto_link(
     return created
 
 
+AUTO_LINK_ALL_BATCH_SIZE = 25
+
+_auto_link_all_lock = threading.Lock()
+_auto_link_all_running = False
+
+
+def _try_begin_auto_link_all() -> bool:
+    global _auto_link_all_running
+    with _auto_link_all_lock:
+        if _auto_link_all_running:
+            return False
+        _auto_link_all_running = True
+        return True
+
+
+def _end_auto_link_all() -> None:
+    global _auto_link_all_running
+    with _auto_link_all_lock:
+        _auto_link_all_running = False
+
+
+def _bulk_auto_link_all_worker(replace: bool, work: List[Tuple[str, str]]) -> None:
+    """
+    Background job: run auto-link for each prompt. Work is processed in batches of
+    AUTO_LINK_ALL_BATCH_SIZE; DB writes flush per insert (Supabase client).
+    """
+    sb = _get_sb()
+    definitions = _get_all_definitions_with_categories()
+    total_created = 0
+    errors: List[Dict[str, str]] = []
+    n = len(work)
+    if n == 0:
+        print("[auto-link-all] no work items")
+        return
+    batches = (n + AUTO_LINK_ALL_BATCH_SIZE - 1) // AUTO_LINK_ALL_BATCH_SIZE
+    for bi in range(batches):
+        start = bi * AUTO_LINK_ALL_BATCH_SIZE
+        chunk = work[start : start + AUTO_LINK_ALL_BATCH_SIZE]
+        batch_created = 0
+        for pid, ptext in chunk:
+            try:
+                created = _run_auto_link(sb, pid, ptext, replace, definitions, quiet=True)
+                c = len(created)
+                batch_created += c
+                total_created += c
+            except Exception as e:
+                errors.append({"prompt_id": pid, "detail": f"{type(e).__name__}: {e}"})
+                print(f"[auto-link-all] prompt {pid} failed: {e}")
+        print(
+            f"[auto-link-all] batch {bi + 1}/{batches} saved ({len(chunk)} prompts), "
+            f"+{batch_created} links this batch, {total_created} cumulative links, {len(errors)} errors so far",
+        )
+    print(f"[auto-link-all] finished: {total_created} new links, {len(errors)} prompt-level errors")
+
+
 @app.post("/api/prompts/{prompt_id}/definitions")
 def post_prompt_definitions(
-    prompt_id: str = Path(..., description="Prompt UUID"),
+    prompt_id: str = ApiPath(..., description="Prompt UUID"),
     body: AddDefinitionLinkRequest = ...,
 ) -> Dict[str, Any]:
     """Create a prompt_definition from analyze-derived indices. No user-supplied indices."""
@@ -811,7 +868,7 @@ def post_prompt_definitions(
 
 @app.post("/api/prompts/{prompt_id}/auto-link")
 def post_prompt_auto_link(
-    prompt_id: str = Path(..., description="Prompt UUID"),
+    prompt_id: str = ApiPath(..., description="Prompt UUID"),
     body: Optional[AutoLinkRequest] = None,
 ) -> Dict[str, Any]:
     """
@@ -906,43 +963,64 @@ def admin_get_prompts(user: UserContext = Depends(get_current_user)) -> Dict[str
 def admin_auto_link_all(
     body: AdminAutoLinkAllRequest = AdminAutoLinkAllRequest(),
     user: UserContext = Depends(get_current_user),
-) -> Dict[str, Any]:
+) -> Any:
     """
-    Run CAMeL auto-detect on every prompt (optional: only_active). Reuses merge semantics:
-    existing links are kept; only new (definition_id, span) pairs are inserted.
+    Queue CAMeL auto-detect for every prompt (optional: only_active). Returns 202 immediately;
+    work runs in a background thread in batches of AUTO_LINK_ALL_BATCH_SIZE. Merge semantics
+    unchanged: existing links kept; new (definition_id, span) pairs inserted.
     """
     _require_admin(user)
-    sb = _get_sb()
     replace = body.replace
     only_active = body.only_active
 
+    sb = _get_sb()
     pr = sb.table("prompts").select("id, prompt_text, is_active").execute()
     rows = pr.data or []
     if only_active:
         rows = [r for r in rows if r.get("is_active")]
 
-    definitions = _get_all_definitions_with_categories()
-    total_created = 0
-    prompts_processed = 0
-    errors: List[Dict[str, str]] = []
-
+    work: List[Tuple[str, str]] = []
     for row in rows:
         pid = row.get("id")
         ptext = row.get("prompt_text") or ""
         if not pid or not (ptext or "").strip():
             continue
-        try:
-            created = _run_auto_link(sb, str(pid), str(ptext), replace, definitions, quiet=True)
-            total_created += len(created)
-            prompts_processed += 1
-        except Exception as e:
-            errors.append({"prompt_id": str(pid), "detail": f"{type(e).__name__}: {e}"})
+        work.append((str(pid), str(ptext)))
 
-    return {
-        "prompts_processed": prompts_processed,
-        "links_created": total_created,
-        "errors": errors,
-    }
+    if not work:
+        return {
+            "status": "noop",
+            "message": "No prompts with text to process.",
+            "prompt_count": 0,
+            "batch_size": AUTO_LINK_ALL_BATCH_SIZE,
+        }
+
+    if not _try_begin_auto_link_all():
+        raise HTTPException(
+            status_code=409,
+            detail="An auto-link-all job is already running. Wait for it to finish, then try again.",
+        )
+
+    def run_job() -> None:
+        try:
+            _bulk_auto_link_all_worker(replace, work)
+        except Exception as e:
+            print(f"[auto-link-all] fatal: {e}")
+            traceback.print_exc()
+        finally:
+            _end_auto_link_all()
+
+    threading.Thread(target=run_job, daemon=True).start()
+
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={
+            "status": "accepted",
+            "message": "Processing prompts in the background (batched saves). Check server logs for progress.",
+            "prompt_count": len(work),
+            "batch_size": AUTO_LINK_ALL_BATCH_SIZE,
+        },
+    )
 
 
 @app.post("/api/admin/prompts")

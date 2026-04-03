@@ -137,13 +137,15 @@ export default function AdminPrompts() {
         replace: bulkReplace,
         only_active: bulkOnlyActive,
       });
-      await load();
-      let text = `Done: ${res.links_created} new link(s) across ${res.prompts_processed} prompt(s).`;
-      if (res.errors?.length) {
-        text += ` ${res.errors.length} prompt(s) failed (see console).`;
-        console.warn('auto-link-all errors', res.errors);
+      if (res.status === 'noop') {
+        setBulkAutoLinkResult(res.message);
+      } else {
+        setBulkAutoLinkResult(
+          `Queued: ${res.prompt_count} prompt(s) processing in the background (${res.batch_size} per batch). ` +
+            'Refresh this page in a few minutes to see new links. Progress is logged on the server.',
+        );
+        void load();
       }
-      setBulkAutoLinkResult(text);
     } catch (e) {
       setBulkAutoLinkResult(e instanceof Error ? e.message : 'Bulk auto-link failed');
     } finally {
