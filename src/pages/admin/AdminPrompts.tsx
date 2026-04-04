@@ -363,6 +363,12 @@ export default function AdminPrompts() {
           {autoAddMessage && (
             <p className="text-muted" style={{ marginBottom: 8 }}>{autoAddMessage}</p>
           )}
+          <AdminPagination
+            offset={listOffset}
+            limit={PROMPTS_PAGE_SIZE}
+            total={listTotal}
+            onOffsetChange={setListOffset}
+          />
           <ul className="item-list">
             {list.map((row) => (
               <li key={row.id} className="padded">
@@ -421,6 +427,12 @@ export default function AdminPrompts() {
               </li>
             ))}
           </ul>
+          <AdminPagination
+            offset={listOffset}
+            limit={PROMPTS_PAGE_SIZE}
+            total={listTotal}
+            onOffsetChange={setListOffset}
+          />
 
           {linkDefOpen && (
             <div className="modal-overlay">
