@@ -16,7 +16,13 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_U
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SECRET_KEY", "")
 # Browsers send Authorization — no "*". These origins are always merged unless CORS_STRICT=1.
 # (Origin has no trailing slash; match what the browser sends.)
-_LOCAL_DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+# Include Capacitor native WebView origins used by Android/iOS builds.
+_LOCAL_DEV_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://localhost",
+    "capacitor://localhost",
+)
 _DEFAULT_FRONTEND_ORIGINS = ("https://qawaid-iota.vercel.app",)
 _CORS_ALWAYS_MERGE = _LOCAL_DEV_ORIGINS + _DEFAULT_FRONTEND_ORIGINS
 _raw = os.environ.get("CORS_ORIGINS", "*").strip()
