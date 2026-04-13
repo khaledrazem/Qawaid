@@ -56,6 +56,13 @@
     "signIn": "تسجيل الدخول بجوجل",
     "signOut": "تسجيل الخروج",
     "deleteAccount": "حذف الحساب",
+    "deleteAccountTitle": "هل تريد حذف حسابك؟",
+    "deleteAccountWarning": "سيُزال ملفك والنقاط والإحصائيات وتسجيل الدخول نهائياً. لا يمكن التراجع.",
+    "deleteAccountTypeLabel": "اكتب DELETE للتأكيد.",
+    "deleteAccountConfirmBtn": "حذف نهائي",
+    "deleteAccountFailed": "تعذر حذف الحساب. حاول مرة أخرى أو تواصل مع الدعم.",
+    "deleteAccountMustType": "اكتب DELETE حرفياً للتأكيد.",
+    "deleteAccountNoEmail": "لا يوجد بريد إلكتروني مرتبط بهذا الحساب؛ تواصل مع الدعم لحذفه.",
     "stats": "الإحصائيات",
     "totalQuestions": "إجمالي الأسئلة",
     "bestSession": "أفضل جلسة",
@@ -95,6 +102,18 @@
     "prevPage": "السابق",
     "nextPage": "التالي",
     "pageOf": "{{current}} من {{total}}"
+  },
+  "accountDeletion": {
+    "title": "حذف حسابك",
+    "intro": "سجّل الدخول، ثم أدخل البريد الإلكتروني لهذا الحساب، ثم أكّد. يجب أن يطابق البريد الحساب الذي سجّلت به. لا يمكن التراجع.",
+    "emailLabel": "البريد الإلكتروني",
+    "continue": "المتابعة إلى التأكيد",
+    "signInFirst": "يجب تسجيل الدخول لحذف حسابك.",
+    "goToProfile": "الانتقال إلى الملف للتسجيل",
+    "modalTitle": "حذف الحساب نهائيا؟",
+    "modalBody": "ستُزال كل بيانات التقدم والنقاط وتسجيل الدخول.",
+    "emailRequired": "أدخل بريدك الإلكتروني.",
+    "emailMismatch": "هذا البريد لا يطابق الحساب المسجّل."
   },
   "common": {
     "loading": "جارٍ التحميل…",

@@ -56,6 +56,13 @@
     "signIn": "Sign in with Google",
     "signOut": "Sign out",
     "deleteAccount": "Delete account",
+    "deleteAccountTitle": "Delete your account?",
+    "deleteAccountWarning": "This permanently removes your profile, scores, stats, and sign-in. This cannot be undone.",
+    "deleteAccountTypeLabel": "Type DELETE to confirm.",
+    "deleteAccountConfirmBtn": "Delete forever",
+    "deleteAccountFailed": "Could not delete account. Try again or contact support.",
+    "deleteAccountMustType": "Type DELETE exactly to confirm.",
+    "deleteAccountNoEmail": "Your account has no email; contact support to delete your account.",
     "stats": "Statistics",
     "totalQuestions": "Total questions",
     "bestSession": "Best session",
@@ -95,6 +102,18 @@
     "prevPage": "Previous",
     "nextPage": "Next",
     "pageOf": "{{current}} of {{total}}"
+  },
+  "accountDeletion": {
+    "title": "Delete your account",
+    "intro": "Sign in, enter the email for this account, then confirm. Your email must match the account you are signed in with. This cannot be undone.",
+    "emailLabel": "Email address",
+    "continue": "Continue to confirmation",
+    "signInFirst": "You must be signed in to delete your account.",
+    "goToProfile": "Go to profile to sign in",
+    "modalTitle": "Delete account permanently?",
+    "modalBody": "All your progress, scores, and sign-in will be removed.",
+    "emailRequired": "Enter your email.",
+    "emailMismatch": "That email does not match your signed-in account."
   },
   "common": {
     "loading": "Loading…",

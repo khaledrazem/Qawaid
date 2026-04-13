@@ -21,12 +21,18 @@ import LessonDetailPage from './pages/app/LessonDetailPage';
 import Play from './pages/app/Play';
 import Finish from './pages/app/Finish';
 import AuthCallback from './pages/app/AuthCallback';
+import PrivacyPolicyPage from './pages/app/PrivacyPolicyPage';
+import AccountDeletionPage from './pages/app/AccountDeletionPage';
 
 function App() {
   return (
     <Routes>
       {/* ---- Auth callback (outside layout — no header) ---- */}
       <Route path="/auth/callback" element={<AuthCallback />} />
+      {/* Privacy: direct URL only on web; not linked from in-app menus */}
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      {/* Account deletion by email: direct URL only (e.g. store listing) */}
+      <Route path="/account-deletion" element={<AccountDeletionPage />} />
 
       {/* ---- Learner routes (wrapped in AppLayout) ---- */}
       <Route element={<AppLayout />}>

@@ -1372,6 +1372,171 @@
   border-color: var(--primary);
 }
 
+.profile-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+  width: 100%;
+}
+
+.profile-delete-account-btn {
+  background: transparent;
+  color: var(--destructive);
+  border: 1px solid rgba(139, 58, 58, 0.45);
+}
+
+.profile-delete-account-btn:hover {
+  background: rgba(139, 58, 58, 0.08);
+}
+
+.profile-delete-modal h3 {
+  font-family: var(--font-heading);
+  color: var(--primary);
+  margin-bottom: var(--space-3);
+}
+
+.profile-delete-warning {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-loose);
+  margin-bottom: var(--space-4);
+  text-align: start;
+}
+
+.profile-delete-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  text-align: start;
+}
+
+.profile-delete-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  margin-bottom: var(--space-3);
+}
+
+.profile-delete-error {
+  color: var(--destructive);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+  text-align: start;
+}
+
+.profile-delete-footer {
+  flex-wrap: wrap;
+}
+
+.profile-delete-confirm-btn {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  border-color: var(--destructive);
+}
+
+.profile-delete-confirm-btn:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.profile-delete-confirm-btn:disabled {
+  opacity: 0.5;
+}
+
+/* --- Privacy policy (web-only route) --- */
+.privacy-policy-page .privacy-policy-content {
+  text-align: start;
+}
+
+.privacy-policy-meta {
+  margin-bottom: var(--space-2);
+}
+
+.privacy-policy-meta a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.privacy-policy-title {
+  margin-bottom: var(--space-2);
+}
+
+.privacy-policy-updated {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-6);
+}
+
+.privacy-policy-card {
+  text-align: start;
+}
+
+.privacy-policy-card h2 {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  color: var(--primary);
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+.privacy-policy-card h2:first-child {
+  margin-top: 0;
+}
+
+.privacy-policy-card p,
+.privacy-policy-card li {
+  color: var(--foreground);
+  line-height: var(--leading-loose);
+  font-size: var(--text-sm);
+}
+
+.privacy-policy-card ul {
+  padding-inline-start: var(--space-6);
+  margin: var(--space-2) 0;
+}
+
+/* --- Account deletion (direct URL) --- */
+.account-deletion-page .account-deletion-content {
+  text-align: start;
+}
+
+.account-deletion-meta {
+  margin-bottom: var(--space-2);
+}
+
+.account-deletion-meta a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.account-deletion-intro {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-loose);
+  margin-bottom: var(--space-6);
+}
+
+.account-deletion-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: stretch;
+  max-width: 28rem;
+}
+
+.account-deletion-card .btn {
+  align-self: flex-start;
+}
+
+.account-deletion-confirm-email {
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 var(--space-4);
+  word-break: break-all;
+}
+
 /* --- Question view --- */
 .question-card {
   position: relative;

@@ -95,6 +95,32 @@ export async function patchProfile(displayName: string): Promise<{ ok: boolean }
   });
 }
 
+/** Permanently delete the signed-in learner account (backend + Supabase Auth). */
+export async function deleteAccount(confirmation: string, email: string): Promise<{ ok: boolean }> {
+  const token = await getAccessToken();
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/api/user/delete-account`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ confirmation, email: email.trim() }),
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: string | unknown };
+      if (typeof j.detail === 'string') msg = j.detail;
+      else if (j.detail != null) msg = JSON.stringify(j.detail);
+    } catch {
+      /* ignore */
+    }
+    const err = new Error(msg) as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<{ ok: boolean }>;
+}
+
 export async function getDifficultyProfile(): Promise<DifficultyWeights> {
   return backendRequestWithAuth<DifficultyWeights>('/api/user/difficulty-profile', { method: 'GET' });
 }

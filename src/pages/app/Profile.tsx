@@ -3,6 +3,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { updateDisplayName, fetchUserStats, type UserStats } from '@/services/userService';
+import { deleteAccount } from '@/services/backendApi';
 import { BackgroundPattern, TextureOverlay, GoldDivider } from '@/components/Decorative';
 import { PageBack } from '@/components/PageBack';
 
@@ -23,13 +24,17 @@ function getLocal(key: string): number {
 export default function Profile() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLanguage();
-  const { user, loading: authLoading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError } =
+  const { user, session, loading: authLoading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError } =
     useAuth();
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const bestSession = getLocal(BEST_SESSION_KEY);
   const sessionsPlayed = getLocal(SESSIONS_PLAYED_KEY);
@@ -59,6 +64,48 @@ export default function Profile() {
     }
     setSaving(false);
     setEditingName(false);
+  };
+
+  const openDeleteModal = () => {
+    setDeleteError(null);
+    setDeleteConfirmInput('');
+    setDeleteOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteBusy) return;
+    setDeleteOpen(false);
+    setDeleteConfirmInput('');
+    setDeleteError(null);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || deleteConfirmInput.trim() !== 'DELETE') {
+      setDeleteError(t('profile.deleteAccountMustType'));
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError(null);
+    const authEmail = session?.user?.email?.trim() ?? '';
+    if (!authEmail) {
+      setDeleteError(t('profile.deleteAccountNoEmail'));
+      return;
+    }
+    try {
+      await deleteAccount('DELETE', authEmail);
+      try {
+        localStorage.removeItem('sahra_offline_session_queue');
+      } catch {
+        /* ignore */
+      }
+      await signOut();
+      setDeleteOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : t('profile.deleteAccountFailed');
+      setDeleteError(msg);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -151,13 +198,60 @@ export default function Profile() {
             </div>
           )}
 
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={signOut}
+          <div className="profile-actions-row">
+            <button type="button" className="btn btn-secondary" onClick={signOut}>
+              {t('profile.signOut')}
+            </button>
+            <button type="button" className="btn profile-delete-account-btn" onClick={openDeleteModal}>
+              {t('profile.deleteAccount')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteOpen && (
+        <div className="modal-backdrop" onClick={closeDeleteModal} role="presentation">
+          <div
+            className="modal-panel profile-delete-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="delete-account-title"
+            aria-modal="true"
           >
-            {t('profile.signOut')}
-          </button>
+            <h3 id="delete-account-title">{t('profile.deleteAccountTitle')}</h3>
+            <p className="profile-delete-warning">{t('profile.deleteAccountWarning')}</p>
+            <label className="profile-delete-label" htmlFor="delete-confirm-input">
+              {t('profile.deleteAccountTypeLabel')}
+            </label>
+            <input
+              id="delete-confirm-input"
+              type="text"
+              className="profile-delete-input"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              disabled={deleteBusy}
+            />
+            {deleteError && (
+              <p className="profile-delete-error" role="alert">
+                {deleteError}
+              </p>
+            )}
+            <div className="modal-footer profile-delete-footer">
+              <button type="button" className="btn btn-secondary" onClick={closeDeleteModal} disabled={deleteBusy}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn profile-delete-confirm-btn"
+                onClick={handleDeleteAccount}
+                disabled={deleteBusy || deleteConfirmInput.trim() !== 'DELETE'}
+              >
+                {deleteBusy ? '…' : t('profile.deleteAccountConfirmBtn')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

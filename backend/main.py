@@ -111,6 +111,7 @@ class AdminAutoLinkAllRequest(BaseModel):
 class UserContext(BaseModel):
     id: str
     role: Optional[str] = None
+    email: Optional[str] = None
 
 
 class SessionSyncRequest(BaseModel):
@@ -213,7 +214,7 @@ def get_current_user(authorization: Optional[str] = Header(None, alias="Authoriz
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing sub (user id)")
-    return UserContext(id=user_id, role=payload.get("role"))
+    return UserContext(id=user_id, role=payload.get("role"), email=payload.get("email"))
 
 
 def get_optional_user(authorization: Optional[str] = Header(None, alias="Authorization")) -> Optional[UserContext]:
@@ -468,8 +469,78 @@ def _utc_now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
 
 
+def _norm_email(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
 class UserProfilePatch(BaseModel):
     displayName: Optional[str] = None
+
+
+class DeleteAccountRequest(BaseModel):
+    """User must type this exact string to confirm permanent deletion."""
+    confirmation: str
+    email: str
+
+
+@app.post("/api/user/delete-account")
+def post_delete_account(body: DeleteAccountRequest, user: UserContext = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Permanently delete the current user's app data (public.users cascades to
+    stats, scores, difficulty profile, question reports) and remove the Supabase Auth user.
+    Requires service role. Admin accounts cannot self-delete here.
+    `email` must match the authenticated user's email (case-insensitive).
+    """
+    if (body.confirmation or "").strip() != "DELETE":
+        raise HTTPException(status_code=400, detail='Type the word DELETE to confirm.')
+
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(status_code=503, detail="Server is not configured for account deletion.")
+
+    sb = _get_sb()
+    session_email = _norm_email(user.email)
+    if not session_email:
+        try:
+            res = sb.auth.admin.get_user_by_id(user.id)
+            uobj = getattr(res, "user", None)
+            if uobj is None and isinstance(res, dict):
+                uobj = res.get("user")
+            if isinstance(uobj, dict):
+                session_email = _norm_email(uobj.get("email"))
+            elif uobj is not None:
+                session_email = _norm_email(getattr(uobj, "email", None))
+        except Exception:
+            logger.exception("delete-account: could not load auth user email")
+    if not session_email:
+        raise HTTPException(
+            status_code=400,
+            detail="This account has no email on file; delete from Profile after signing in or contact support.",
+        )
+    if _norm_email(body.email) != session_email:
+        raise HTTPException(status_code=403, detail="Email does not match this signed-in account.")
+
+    r = sb.table("users").select("id, is_admin").eq("id", user.id).execute()
+    if not r.data:
+        raise HTTPException(status_code=404, detail="User not found")
+    if r.data[0].get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin accounts cannot be deleted with this action.")
+
+    try:
+        sb.table("users").delete().eq("id", user.id).execute()
+    except Exception as e:
+        logger.exception("delete-account: failed deleting public.users row")
+        raise HTTPException(status_code=500, detail="Could not delete account data.") from e
+
+    try:
+        sb.auth.admin.delete_user(user.id)
+    except Exception as e:
+        logger.exception("delete-account: failed deleting auth user after public.users delete")
+        raise HTTPException(
+            status_code=500,
+            detail="Account data was removed but sign-in could not be fully cleared. Contact support.",
+        ) from e
+
+    return {"ok": True}
 
 
 @app.get("/api/user/profile")
