@@ -25,7 +25,6 @@ export interface BatchResponse {
 export async function getAccessToken(): Promise<string | null> {
   const { supabase } = await import('@/lib/supabase');
   const { data } = await supabase.auth.getSession();
-  console.log('data', data);
   return data.session?.access_token ?? null;
 }
 

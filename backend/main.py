@@ -358,8 +358,12 @@ def get_global_leaderboard() -> List[Dict[str, Any]]:
     """
     Global all-time leaderboard.
     Returns LeaderboardEntryDTO[] (userId, displayName, avatarUrl, rank, points).
+    Only includes users registered in public.users (excludes orphan monthly_scores rows).
     """
     sb = _get_sb()
+    ru = sb.table("users").select("id").execute()
+    registered = {row["id"] for row in (ru.data or [])}
+
     r = sb.table("monthly_scores").select("user_id, points, display_name, avatar_url").execute()
     rows = r.data or []
     if not rows:
@@ -368,6 +372,8 @@ def get_global_leaderboard() -> List[Dict[str, Any]]:
     agg: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         uid = row["user_id"]
+        if uid not in registered:
+            continue
         entry = agg.get(uid)
         pts = row.get("points") or 0
         if entry:

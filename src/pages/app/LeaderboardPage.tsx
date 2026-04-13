@@ -1,23 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchLeaderboard, fetchGlobalLeaderboard } from '@/services/leaderboardService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
+import { PageBack } from '@/components/PageBack';
 import type { LeaderboardDTO, LeaderboardEntryDTO } from '@/types/dto';
 
 type Tab = 'monthly' | 'personal' | 'global';
 
 export default function LeaderboardPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>('monthly');
   const [loading, setLoading] = useState(true);
   const [monthly, setMonthly] = useState<LeaderboardDTO | null>(null);
   const [globalEntries, setGlobalEntries] = useState<LeaderboardEntryDTO[]>([]);
 
-  // Fetch leaderboard data on mount (pass userId if logged in)
+  // Fetch leaderboard after auth is ready so JWT-backed calls see the right user.
   useEffect(() => {
+    if (authLoading) return;
+
     let cancelled = false;
 
     (async () => {
@@ -32,8 +34,10 @@ export default function LeaderboardPage() {
       setLoading(false);
     })();
 
-    return () => { cancelled = true; };
-  }, [user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, authLoading]);
 
   return (
     <div className="page page-with-bg">
@@ -41,7 +45,7 @@ export default function LeaderboardPage() {
       <TextureOverlay className="page-texture" />
       <div className="page-content">
         <div className="page-header">
-          <Link to="/" className="page-back">←</Link>
+          <PageBack to="/" />
           <h1 className="page-heading">{t('leaderboard.title')}</h1>
         </div>
 
@@ -122,7 +126,7 @@ function MonthlyTab({ leaderboard }: { leaderboard: LeaderboardDTO | null }) {
       )}
 
       {/* User rank or guest CTA */}
-      {user && currentUserRank ? (
+      {user && currentUserRank != null ? (
         <div className="leaderboard-your-rank">
           {t('leaderboard.yourRank')}: <strong>#{currentUserRank}</strong>
         </div>

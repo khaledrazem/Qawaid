@@ -81,7 +81,7 @@ export default function Finish() {
 
       try {
         const lb = await fetchLeaderboard();
-        if (lb?.currentUserRank) setRank(lb.currentUserRank);
+        if (lb?.currentUserRank != null) setRank(lb.currentUserRank);
       } catch (err) {
         console.warn('[Finish] Failed to fetch rank:', err);
       }

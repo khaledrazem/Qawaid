@@ -158,7 +158,7 @@
 
 .main-menu-profile-icon {
   position: absolute;
-  top: var(--space-6);
+  top: calc(var(--space-6) + env(safe-area-inset-top, 0px));
   inset-inline-start: var(--space-6);
   z-index: 10;
   width: 44px;
@@ -195,7 +195,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: var(--space-6) var(--space-6) var(--space-10);
-  padding-top: max(var(--space-10), 6rem);
+  padding-top: calc(max(var(--space-10), 6rem) + env(safe-area-inset-top, 0px));
 }
 
 @media (max-width: 640px) {
@@ -204,7 +204,7 @@
     min-height: 0;
     justify-content: center;
     padding: max(var(--space-6), 3vh) var(--space-4) var(--space-4);
-    padding-top: max(4.5rem, 10vh);
+    padding-top: calc(max(4.5rem, 10vh) + env(safe-area-inset-top, 0px));
     gap: clamp(0.5rem, 2vh, 1rem);
   }
 }
@@ -619,6 +619,7 @@
   align-items: center;
   gap: var(--space-4);
   margin-bottom: var(--space-8);
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .page-back {
@@ -809,7 +810,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
+  padding: calc(var(--space-3) + env(safe-area-inset-top, 0px)) var(--space-6) var(--space-3);
   background: var(--primary);
   color: var(--primary-foreground);
   background-image: linear-gradient(to bottom, transparent 0, transparent calc(100% - 3px), #b8964d calc(100% - 3px), #C6A75E 50%, #e8c97a 100%);

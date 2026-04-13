@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { updateDisplayName, fetchUserStats, type UserStats } from '@/services/userService';
 import { BackgroundPattern, TextureOverlay, GoldDivider } from '@/components/Decorative';
+import { PageBack } from '@/components/PageBack';
 
 const BEST_SESSION_KEY = 'sahra_best_session';
 const SESSIONS_PLAYED_KEY = 'sahra_sessions_played';
@@ -23,7 +23,8 @@ function getLocal(key: string): number {
 export default function Profile() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLanguage();
-  const { user, loading: authLoading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError } = useAuth();
+  const { user, loading: authLoading, authError, signInWithGoogle, signOut, refreshUser, clearAuthError } =
+    useAuth();
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -34,11 +35,15 @@ export default function Profile() {
   const sessionsPlayed = getLocal(SESSIONS_PLAYED_KEY);
   const isLoggedIn = !!user;
 
-  // Fetch cloud stats when logged in
+  // Fetch cloud stats when logged in (after auth has finished resolving).
   useEffect(() => {
-    if (!user) { setStats(null); return; }
+    if (authLoading) return;
+    if (!user) {
+      setStats(null);
+      return;
+    }
     fetchUserStats(user.id).then(setStats);
-  }, [user]);
+  }, [user, authLoading]);
 
   const handleEditName = () => {
     setNameInput(user?.displayName ?? '');
@@ -63,7 +68,7 @@ export default function Profile() {
 
       <div className="page-content">
         <div className="page-header">
-          <Link to="/" className="page-back">←</Link>
+          <PageBack to="/" />
           <h1 className="page-heading">{t('profile.title')}</h1>
         </div>
 

@@ -161,7 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (code) parts.push(`Code: ${code}`);
         if (status != null) parts.push(`Status: ${status}`);
         if (code === '10' || msg === 'Something went wrong') {
-          parts.push('(Android: add your app SHA-1 and package name to the Android OAuth client in Google Cloud Console; see docs)');
+          parts.push(
+            '(Android: add the signing keystore SHA-1 to the Android OAuth client in Google Cloud; '
+            + 'package must be com.qawaid.app. serverClientId must match your Web OAuth client used by Supabase.)'
+          );
         }
         const message = parts.join(' · ');
         setAuthError(message);

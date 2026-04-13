@@ -5,16 +5,16 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { fetchLessonById } from '@/services/lessonService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
+import { PageBack } from '@/components/PageBack';
 import type { LessonDetailDTO } from '@/services/lessonService';
 
 export default function LessonDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const contentRef = useRef<HTMLDivElement>(null);
   const [lesson, setLesson] = useState<LessonDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export default function LessonDetailPage() {
         <TextureOverlay className="page-texture" />
         <div className="page-content">
         <div className="page-header">
-          <Link to="/lessons" className="page-back">←</Link>
+          <PageBack to="/lessons" />
           <h1 className="page-heading">{t('lessons.title')}</h1>
         </div>
         <div className="placeholder">
@@ -75,7 +75,7 @@ export default function LessonDetailPage() {
         <TextureOverlay className="page-texture" />
         <div className="page-content">
         <div className="page-header">
-          <button type="button" className="page-back" onClick={() => navigate('/lessons')}>←</button>
+          <PageBack to="/lessons" />
           <h1 className="page-heading">{t('lessons.title')}</h1>
         </div>
         <div className="placeholder">
@@ -94,7 +94,7 @@ export default function LessonDetailPage() {
       <TextureOverlay className="page-texture" />
       <div className="page-content">
       <div className="page-header">
-        <Link to="/lessons" className="page-back">←</Link>
+        <PageBack to="/lessons" />
         <h1 className="page-heading lesson-detail-title">{lesson.title}</h1>
       </div>
 

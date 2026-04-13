@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
 import { fetchLessonsList } from '@/services/lessonService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
+import { PageBack } from '@/components/PageBack';
 import type { LessonListItemDTO } from '@/services/lessonService';
 
 export default function LessonsPage() {
@@ -32,7 +33,7 @@ export default function LessonsPage() {
       <TextureOverlay className="page-texture" />
       <div className="page-content">
         <div className="page-header">
-          <Link to="/" className="page-back">←</Link>
+          <PageBack to="/" />
           <h1 className="page-heading">{t('lessons.title')}</h1>
         </div>
 

@@ -11,6 +11,7 @@
     "cap:open:android": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.0.0",
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@supabase/ssr": "^0.8.0",

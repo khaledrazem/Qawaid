@@ -30,28 +30,31 @@ interface UseQuestionBatchReturn {
 
 export function useQuestionBatch(): UseQuestionBatchReturn {
   const loaderRef = useRef<BatchLoader | null>(null);
-  const initStarted = useRef(false);
   const [loading, setLoading] = useState(true);
   const [empty, setEmpty] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [current, setCurrent] = useState<QuestionDTO | null>(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
-  // Initialize on mount — guard against StrictMode double-mount.
+  // Wait for auth to resolve, then load (or reload when the logged-in user changes).
   useEffect(() => {
-    if (initStarted.current) return;
-    initStarted.current = true;
+    if (authLoading) return;
+
+    let cancelled = false;
 
     const init = async () => {
+      setLoading(true);
+      setEmpty(false);
+      setAuthRequired(false);
+      setCurrent(null);
+
       const loader = new BatchLoader();
       loaderRef.current = loader;
 
-      // Fetch user-specific difficulty weights if logged in
       let userWeights;
       if (user?.id) {
         try {
           userWeights = await fetchUserDifficulty(user.id);
-          console.log('[useQuestionBatch] Using user difficulty weights:', userWeights);
         } catch (err) {
           console.warn('[useQuestionBatch] Failed to fetch user difficulty, using defaults:', err);
         }
@@ -60,14 +63,18 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
       try {
         await loader.init(userWeights);
       } catch (err) {
+        if (cancelled) return;
         const status = (err as Error & { status?: number })?.status;
         if (status === 401) {
           setAuthRequired(true);
           setLoading(false);
           return;
         }
+        setLoading(false);
         throw err;
       }
+
+      if (cancelled) return;
 
       if (loader.empty) {
         setLoading(false);
@@ -75,16 +82,20 @@ export function useQuestionBatch(): UseQuestionBatchReturn {
         return;
       }
 
-      // Serve the first question
       const first = await loader.next();
+      if (cancelled) return;
 
       setCurrent(first);
       setLoading(false);
       setEmpty(!first);
     };
 
-    init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void init();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, authLoading]);
 
   const advance = useCallback(async () => {
     const loader = loaderRef.current;
