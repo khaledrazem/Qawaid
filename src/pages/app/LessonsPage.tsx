@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
-import { fetchLessonsList } from '@/services/lessonService';
+import { fetchLessonsListFresh, getCachedLessonsList } from '@/services/lessonService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
 import { PageBack } from '@/components/PageBack';
 import type { LessonListItemDTO } from '@/services/lessonService';
@@ -18,11 +18,15 @@ export default function LessonsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchLessonsList().then((list) => {
-      if (!cancelled) {
-        setLessons(list);
-        setLoading(false);
-      }
+    const cached = getCachedLessonsList();
+    if (cached && cached.length > 0) {
+      setLessons(cached);
+      setLoading(false);
+    }
+    fetchLessonsListFresh().then((list) => {
+      if (cancelled) return;
+      setLessons(list);
+      setLoading(false);
     });
     return () => { cancelled = true; };
   }, []);

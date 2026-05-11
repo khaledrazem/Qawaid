@@ -140,6 +140,7 @@ export class BatchLoader {
   private preloading = false;
   private preloadPromise: Promise<void> | null = null;
   private userWeights?: DifficultyWeights;
+  private backgroundRefreshPromise: Promise<void> | null = null;
 
   /** True when the initial batch is still loading. */
   public loading = true;
@@ -169,6 +170,31 @@ export class BatchLoader {
       return;
     }
 
+    const batchPayload = loadBatchPayload();
+    const cached = batchPayload?.questions ?? null;
+    const cacheStale =
+      isNavigatorOnline() &&
+      batchPayload != null &&
+      cached != null &&
+      cached.length > 0 &&
+      isCacheExpired(batchPayload.updatedAt);
+
+    if (cached && cached.length > 0) {
+      console.log(LOG_PREFIX, `Loaded ${cached.length} questions from cache`);
+      this.queue = cached;
+      for (const q of cached) {
+        if (q.promptId) this.usedPromptIds.add(q.promptId);
+      }
+      this.loading = false;
+      this.empty = false;
+      if (cacheStale) {
+        console.log(LOG_PREFIX, 'Cache is stale — refreshing in background');
+      }
+      this.refreshInBackground();
+      if (this.queue.length <= BATCH.threshold) this.triggerPreload();
+      return;
+    }
+
     try {
       const { playable } = await getPlayable();
       if (!playable) {
@@ -195,30 +221,6 @@ export class BatchLoader {
       }
       this.loading = false;
       this.empty = true;
-      return;
-    }
-
-    const batchPayload = loadBatchPayload();
-    const cached = batchPayload?.questions ?? null;
-    const cacheStale =
-      isNavigatorOnline() &&
-      batchPayload != null &&
-      cached != null &&
-      cached.length > 0 &&
-      isCacheExpired(batchPayload.updatedAt);
-
-    if (cacheStale) {
-      clearStorage();
-      console.log(LOG_PREFIX, 'Cache older than max age — fetching fresh batch');
-    } else if (cached && cached.length > 0) {
-      console.log(LOG_PREFIX, `Loaded ${cached.length} questions from cache`);
-      this.queue = cached;
-      for (const q of cached) {
-        if (q.promptId) this.usedPromptIds.add(q.promptId);
-      }
-      this.loading = false;
-      this.empty = false;
-      if (this.queue.length <= BATCH.threshold) this.triggerPreload();
       return;
     }
 
@@ -345,5 +347,36 @@ export class BatchLoader {
         this.preloading = false;
         this.preloadPromise = null;
       });
+  }
+
+  private refreshInBackground(): void {
+    if (!isNavigatorOnline()) return;
+    if (this.backgroundRefreshPromise) return;
+    this.backgroundRefreshPromise = (async () => {
+      try {
+        const { playable } = await getPlayable();
+        if (!playable) return;
+        const fresh = await postBatch({
+          count: BATCH.size,
+          selectedCategoryIds: getSelectedCategories(),
+          usedPromptIds: [],
+          userWeights: this.userWeights,
+        });
+        if (!fresh.questions?.length) return;
+        this.queue = fresh.questions;
+        this.usedPromptIds = new Set<string>();
+        for (const q of fresh.questions) {
+          if (q.promptId) this.usedPromptIds.add(q.promptId);
+        }
+        saveToStorage(this.queue);
+        if (this.queue.length <= BATCH.threshold && !this.preloading) {
+          this.triggerPreload();
+        }
+      } catch (err) {
+        console.warn(LOG_PREFIX, 'Background refresh failed:', err);
+      } finally {
+        this.backgroundRefreshPromise = null;
+      }
+    })();
   }
 }

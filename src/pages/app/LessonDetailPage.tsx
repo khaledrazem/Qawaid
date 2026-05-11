@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from '@/hooks/useTranslation';
-import { fetchLessonById } from '@/services/lessonService';
+import { fetchLessonByIdFresh, getCachedLessonById } from '@/services/lessonService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
 import { PageBack } from '@/components/PageBack';
 import type { LessonDetailDTO } from '@/services/lessonService';
@@ -29,7 +29,14 @@ export default function LessonDetailPage() {
       return;
     }
     let cancelled = false;
-    fetchLessonById(id).then((data) => {
+    const cached = getCachedLessonById(id);
+    if (cached) {
+      setLesson(cached);
+      setNotFound(false);
+      setCurrentPage(0);
+      setLoading(false);
+    }
+    fetchLessonByIdFresh(id).then((data) => {
       if (cancelled) return;
       setLesson(data);
       setNotFound(!data);

@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { updateDisplayName, fetchUserStats, type UserStats } from '@/services/userService';
+import {
+  updateDisplayName,
+  fetchUserStatsFresh,
+  getCachedUserStats,
+  type UserStats,
+} from '@/services/userService';
 import { deleteAccount } from '@/services/backendApi';
 import { BackgroundPattern, TextureOverlay, GoldDivider } from '@/components/Decorative';
 import { PageBack } from '@/components/PageBack';
@@ -47,7 +52,11 @@ export default function Profile() {
       setStats(null);
       return;
     }
-    fetchUserStats(user.id).then(setStats);
+    const cached = getCachedUserStats(user.id);
+    if (cached) {
+      setStats(cached);
+    }
+    fetchUserStatsFresh(user.id).then(setStats);
   }, [user, authLoading]);
 
   const handleEditName = () => {

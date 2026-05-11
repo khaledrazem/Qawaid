@@ -6,9 +6,11 @@
  */
 
 import { sessionSync, getProfile, patchProfile } from '@/services/backendApi';
+import { readCache, writeCache, clearCache } from '@/services/localCache';
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 const LOG = '[UserService]';
+const USER_STATS_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 
 /* -----------------------------------------------------------------------
    Types
@@ -120,4 +122,24 @@ export async function fetchUserStats(_userId: string): Promise<UserStats | null>
     console.error(LOG, 'Error fetching user stats:', err);
     return null;
   }
+}
+
+function userStatsCacheKey(userId: string): string {
+  return `sahra_user_stats_cache_v1:${userId}`;
+}
+
+export function getCachedUserStats(userId: string): UserStats | null {
+  if (!userId) return null;
+  return readCache<UserStats>(userStatsCacheKey(userId), USER_STATS_CACHE_MAX_AGE_MS);
+}
+
+export async function fetchUserStatsFresh(userId: string): Promise<UserStats | null> {
+  if (!userId) return null;
+  const stats = await fetchUserStats(userId);
+  if (stats) {
+    writeCache(userStatsCacheKey(userId), stats);
+  } else {
+    clearCache(userStatsCacheKey(userId));
+  }
+  return stats;
 }

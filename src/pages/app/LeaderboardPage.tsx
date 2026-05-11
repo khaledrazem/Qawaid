@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchLeaderboard, fetchGlobalLeaderboard } from '@/services/leaderboardService';
+import {
+  fetchLeaderboardFresh,
+  fetchGlobalLeaderboardFresh,
+  getCachedLeaderboard,
+  getCachedGlobalLeaderboard,
+} from '@/services/leaderboardService';
 import { BackgroundPattern, TextureOverlay } from '@/components/Decorative';
 import { PageBack } from '@/components/PageBack';
 import type { LeaderboardDTO, LeaderboardEntryDTO } from '@/types/dto';
@@ -21,12 +26,22 @@ export default function LeaderboardPage() {
     if (authLoading) return;
 
     let cancelled = false;
+    const cachedMonthly = getCachedLeaderboard();
+    const cachedGlobal = getCachedGlobalLeaderboard();
+    if (cachedMonthly) {
+      setMonthly(cachedMonthly);
+      setLoading(false);
+    }
+    if (cachedGlobal) {
+      setGlobalEntries(cachedGlobal);
+      setLoading(false);
+    }
 
     (async () => {
-      setLoading(true);
+      setLoading(!(cachedMonthly || cachedGlobal));
       const [monthlyData, globalData] = await Promise.all([
-        fetchLeaderboard(),
-        fetchGlobalLeaderboard(),
+        fetchLeaderboardFresh(),
+        fetchGlobalLeaderboardFresh(),
       ]);
       if (cancelled) return;
       setMonthly(monthlyData);
